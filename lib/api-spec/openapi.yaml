@@ -316,6 +316,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /invoices/{id}/dropbox-link:
+    get:
+      operationId: getDropboxLink
+      tags: [invoices]
+      summary: Get a temporary download link for the Dropbox PDF
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Temporary link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DropboxLinkResponse"
+        "400":
+          description: No Dropbox file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /invoices/{id}/reextract:
     post:
       operationId: reextractInvoice
@@ -641,6 +672,14 @@ components:
           type: ["number", "null"]
         buchungstext:
           type: ["string", "null"]
+
+    DropboxLinkResponse:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
 
     InvoicePreview:
       type: object

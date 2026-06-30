@@ -132,6 +132,10 @@ export interface InvoiceUpdate {
   buchungstext?: string | null;
 }
 
+export interface DropboxLinkResponse {
+  url: string;
+}
+
 export interface InvoicePreview {
   dateiname: string;
   /** @nullable */

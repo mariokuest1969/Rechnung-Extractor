@@ -255,6 +255,18 @@ export const ExtractPreviewResponse = zod.array(ExtractPreviewResponseItem)
 
 
 /**
+ * @summary Get a temporary download link for the Dropbox PDF
+ */
+export const GetDropboxLinkParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetDropboxLinkResponse = zod.object({
+  "url": zod.string()
+})
+
+
+/**
  * @summary Re-extract invoice data from Dropbox PDF
  */
 export const ReextractInvoiceParams = zod.object({

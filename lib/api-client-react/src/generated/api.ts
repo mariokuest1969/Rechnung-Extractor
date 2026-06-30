@@ -26,6 +26,7 @@ import type {
   BuchungskontoCreate,
   BulkUpdateBody,
   BulkUpdateResult,
+  DropboxLinkResponse,
   DropboxSyncResult,
   ErrorResponse,
   HealthStatus,
@@ -1159,6 +1160,83 @@ export const useExtractPreview = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getExtractPreviewMutationOptions(options));
     }
+
+export const getGetDropboxLinkUrl = (id: number,) => {
+
+
+
+
+  return `/api/invoices/${id}/dropbox-link`
+}
+
+/**
+ * @summary Get a temporary download link for the Dropbox PDF
+ */
+export const getDropboxLink = async (id: number, options?: RequestInit): Promise<DropboxLinkResponse> => {
+
+  return customFetch<DropboxLinkResponse>(getGetDropboxLinkUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDropboxLinkQueryKey = (id: number,) => {
+    return [
+    `/api/invoices/${id}/dropbox-link`
+    ] as const;
+    }
+
+
+export const getGetDropboxLinkQueryOptions = <TData = Awaited<ReturnType<typeof getDropboxLink>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDropboxLink>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDropboxLinkQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDropboxLink>>> = ({ signal }) => getDropboxLink(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDropboxLink>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDropboxLinkQueryResult = NonNullable<Awaited<ReturnType<typeof getDropboxLink>>>
+export type GetDropboxLinkQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a temporary download link for the Dropbox PDF
+ */
+
+export function useGetDropboxLink<TData = Awaited<ReturnType<typeof getDropboxLink>>, TError = ErrorType<ErrorResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDropboxLink>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDropboxLinkQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getReextractInvoiceUrl = (id: number,) => {
 

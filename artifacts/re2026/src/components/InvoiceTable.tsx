@@ -28,6 +28,7 @@ import {
   BookOpen,
   X,
   Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -254,6 +255,17 @@ export function InvoiceTable() {
     },
   });
 
+  const openDropboxLink = async (id: number) => {
+    try {
+      const res = await fetch(`/api/invoices/${id}/dropbox-link`);
+      if (!res.ok) { toast.error("Link konnte nicht erstellt werden"); return; }
+      const { url } = await res.json() as { url: string };
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      toast.error("Fehler beim Öffnen der Datei");
+    }
+  };
+
   const handleUpdate = (id: number, field: keyof Invoice, value: string | null) => {
     let parsedValue: string | number | null = value;
     if (["bruttoBetrag", "steuersatz", "steuerBetrag", "nettoBetrag"].includes(field)) {
@@ -430,14 +442,23 @@ export function InvoiceTable() {
                     >
                       {inv.dateiname}
                       {inv.dropboxFileId && (
-                        <button
-                          title="Mit KI neu extrahieren"
-                          onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
-                          disabled={reextractMutation.isPending}
-                          className="ml-1 text-blue-400 hover:text-primary transition-colors"
-                        >
-                          <Sparkles className="inline h-3 w-3" />
-                        </button>
+                        <>
+                          <button
+                            title="PDF in Dropbox öffnen"
+                            onClick={(e) => { e.stopPropagation(); void openDropboxLink(inv.id); }}
+                            className="ml-1 text-blue-400 hover:text-blue-600 transition-colors"
+                          >
+                            <ExternalLink className="inline h-3 w-3" />
+                          </button>
+                          <button
+                            title="Mit KI neu extrahieren"
+                            onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
+                            disabled={reextractMutation.isPending}
+                            className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
+                          >
+                            <Sparkles className="inline h-3 w-3" />
+                          </button>
+                        </>
                       )}
                     </td>
                     <td className="px-4 py-2 font-medium">

@@ -13,6 +13,7 @@ export * from './buchungskontoCreate';
 export * from './bulkUpdateBody';
 export * from './bulkUpdateBodyFields';
 export * from './bulkUpdateResult';
+export * from './dropboxLinkResponse';
 export * from './dropboxSyncResult';
 export * from './errorResponse';
 export * from './healthStatus';

@@ -180,6 +180,30 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   res.json({ updated: numericIds.length });
 });
 
+// GET /invoices/:id/dropbox-link — return temporary Dropbox download URL
+router.get("/invoices/:id/dropbox-link", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
+  if (!inv) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
+  if (!inv.dropboxFileId) { res.status(400).json({ error: "Keine Dropbox-Datei verknüpft" }); return; }
+  try {
+    const { ReplitConnectors } = await import("@replit/connectors-sdk");
+    const connectors = new ReplitConnectors();
+    const linkResponse = await connectors.proxy("dropbox", "/2/files/get_temporary_link", {
+      method: "POST",
+      body: JSON.stringify({ path: inv.dropboxFileId }),
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!linkResponse.ok) { res.status(500).json({ error: "Dropbox-Link konnte nicht erstellt werden" }); return; }
+    const { link } = await linkResponse.json() as { link: string };
+    res.json({ url: link });
+  } catch (err) {
+    req.log.error({ err, id }, "dropbox-link failed");
+    res.status(500).json({ error: "Fehler beim Erstellen des Links" });
+  }
+});
+
 // POST /invoices/:id/reextract — re-download from Dropbox and re-run extraction
 router.post("/invoices/:id/reextract", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
