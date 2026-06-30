@@ -63,6 +63,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { exportInvoicesToCSV } from "@/lib/csv";
+import { exportInvoicesToXLSX } from "@/lib/xlsx-export";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bulk-edit dialog: Rechnungssteller / Lieferant
@@ -420,6 +421,9 @@ export function InvoiceTable() {
             </Button>
             <Button variant="outline" size="sm" onClick={() => exportInvoicesToCSV(invoices)}>
               CSV Export
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => exportInvoicesToXLSX(invoices)}>
+              Excel Export
             </Button>
           </div>
         </div>
