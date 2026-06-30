@@ -54,10 +54,30 @@ export interface Invoice {
      */
   bemerkung?: string | null;
   /**
+     * Custom free-text field 1
+     * @nullable
+     */
+  freifeld1?: string | null;
+  /**
+     * Custom free-text field 2
+     * @nullable
+     */
+  freifeld2?: string | null;
+  /**
+     * Custom free-text field 3
+     * @nullable
+     */
+  freifeld3?: string | null;
+  /**
      * Original PDF filename
      * @nullable
      */
   dateiname?: string | null;
+  /**
+     * Dropbox file ID (set when imported from Dropbox)
+     * @nullable
+     */
+  dropboxFileId?: string | null;
   /** Creation timestamp */
   createdAt: string;
 }

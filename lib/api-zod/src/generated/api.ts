@@ -32,7 +32,11 @@ export const ListInvoicesResponseItem = zod.object({
   "nettoBetrag": zod.number().nullish().describe('Net amount'),
   "waehrung": zod.string().nullish().describe('Currency (e.g. EUR)'),
   "bemerkung": zod.string().nullish().describe('Notes \/ remarks'),
+  "freifeld1": zod.string().nullish().describe('Custom free-text field 1'),
+  "freifeld2": zod.string().nullish().describe('Custom free-text field 2'),
+  "freifeld3": zod.string().nullish().describe('Custom free-text field 3'),
   "dateiname": zod.string().nullish().describe('Original PDF filename'),
+  "dropboxFileId": zod.string().nullish().describe('Dropbox file ID (set when imported from Dropbox)'),
   "createdAt": zod.string().describe('Creation timestamp')
 })
 export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem)
@@ -70,10 +74,26 @@ export const UploadInvoicesResponseItem = zod.object({
   "nettoBetrag": zod.number().nullish().describe('Net amount'),
   "waehrung": zod.string().nullish().describe('Currency (e.g. EUR)'),
   "bemerkung": zod.string().nullish().describe('Notes \/ remarks'),
+  "freifeld1": zod.string().nullish().describe('Custom free-text field 1'),
+  "freifeld2": zod.string().nullish().describe('Custom free-text field 2'),
+  "freifeld3": zod.string().nullish().describe('Custom free-text field 3'),
   "dateiname": zod.string().nullish().describe('Original PDF filename'),
+  "dropboxFileId": zod.string().nullish().describe('Dropbox file ID (set when imported from Dropbox)'),
   "createdAt": zod.string().describe('Creation timestamp')
 })
 export const UploadInvoicesResponse = zod.array(UploadInvoicesResponseItem)
+
+
+/**
+ * Immediately scan the configured Dropbox folder for new PDFs and import them
+ * @summary Trigger Dropbox sync
+ */
+export const TriggerDropboxSyncResponse = zod.object({
+  "imported": zod.number().describe('Number of new files imported'),
+  "skipped": zod.number().describe('Number of files already in DB (skipped)'),
+  "errors": zod.number().describe('Number of files that failed to process'),
+  "folder": zod.string().describe('Dropbox folder that was scanned')
+})
 
 
 /**
@@ -94,7 +114,11 @@ export const GetInvoiceResponse = zod.object({
   "nettoBetrag": zod.number().nullish().describe('Net amount'),
   "waehrung": zod.string().nullish().describe('Currency (e.g. EUR)'),
   "bemerkung": zod.string().nullish().describe('Notes \/ remarks'),
+  "freifeld1": zod.string().nullish().describe('Custom free-text field 1'),
+  "freifeld2": zod.string().nullish().describe('Custom free-text field 2'),
+  "freifeld3": zod.string().nullish().describe('Custom free-text field 3'),
   "dateiname": zod.string().nullish().describe('Original PDF filename'),
+  "dropboxFileId": zod.string().nullish().describe('Dropbox file ID (set when imported from Dropbox)'),
   "createdAt": zod.string().describe('Creation timestamp')
 })
 
@@ -115,7 +139,10 @@ export const UpdateInvoiceBody = zod.object({
   "steuerBetrag": zod.number().nullish(),
   "nettoBetrag": zod.number().nullish(),
   "waehrung": zod.string().nullish(),
-  "bemerkung": zod.string().nullish()
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish()
 })
 
 export const UpdateInvoiceResponse = zod.object({
@@ -129,7 +156,11 @@ export const UpdateInvoiceResponse = zod.object({
   "nettoBetrag": zod.number().nullish().describe('Net amount'),
   "waehrung": zod.string().nullish().describe('Currency (e.g. EUR)'),
   "bemerkung": zod.string().nullish().describe('Notes \/ remarks'),
+  "freifeld1": zod.string().nullish().describe('Custom free-text field 1'),
+  "freifeld2": zod.string().nullish().describe('Custom free-text field 2'),
+  "freifeld3": zod.string().nullish().describe('Custom free-text field 3'),
   "dateiname": zod.string().nullish().describe('Original PDF filename'),
+  "dropboxFileId": zod.string().nullish().describe('Dropbox file ID (set when imported from Dropbox)'),
   "createdAt": zod.string().describe('Creation timestamp')
 })
 

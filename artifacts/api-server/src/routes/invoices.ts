@@ -11,6 +11,7 @@ import {
   GetInvoiceStatsResponse,
 } from "@workspace/api-zod";
 import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
+import { syncDropbox } from "../lib/dropbox-poller";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -40,7 +41,11 @@ function toApiInvoice(row: typeof invoicesTable.$inferSelect) {
     nettoBetrag: row.nettoBetrag != null ? parseFloat(row.nettoBetrag) : null,
     waehrung: row.waehrung ?? null,
     bemerkung: row.bemerkung ?? null,
+    freifeld1: row.freifeld1 ?? null,
+    freifeld2: row.freifeld2 ?? null,
+    freifeld3: row.freifeld3 ?? null,
     dateiname: row.dateiname ?? null,
+    dropboxFileId: row.dropboxFileId ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -141,6 +146,17 @@ router.post(
   }
 );
 
+// POST /invoices/dropbox-sync — manual trigger (poller runs automatically)
+router.post("/invoices/dropbox-sync", async (req, res): Promise<void> => {
+  try {
+    const result = await syncDropbox();
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Dropbox sync failed");
+    res.status(500).json({ error: "Dropbox-Sync fehlgeschlagen" });
+  }
+});
+
 // GET /invoices/:id
 router.get("/invoices/:id", async (req, res): Promise<void> => {
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -189,6 +205,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (d.nettoBetrag !== undefined) update.nettoBetrag = d.nettoBetrag != null ? String(d.nettoBetrag) : null;
   if (d.waehrung !== undefined) update.waehrung = d.waehrung;
   if (d.bemerkung !== undefined) update.bemerkung = d.bemerkung;
+  if (d.freifeld1 !== undefined) update.freifeld1 = d.freifeld1;
+  if (d.freifeld2 !== undefined) update.freifeld2 = d.freifeld2;
+  if (d.freifeld3 !== undefined) update.freifeld3 = d.freifeld3;
 
   if (Object.keys(update).length === 0) {
     res.status(400).json({ error: "Keine Felder zum Aktualisieren" });

@@ -30,6 +30,7 @@ async function buildAll() {
     external: [
       "*.node",
       "pdf-parse",
+      "@replit/connectors-sdk",
       "sharp",
       "better-sqlite3",
       "sqlite3",

@@ -13,7 +13,11 @@ export const invoicesTable = pgTable("invoices", {
   nettoBetrag: numeric("netto_betrag", { precision: 12, scale: 2 }),
   waehrung: text("waehrung").default("EUR"),
   bemerkung: text("bemerkung"),
+  freifeld1: text("freifeld1"),
+  freifeld2: text("freifeld2"),
+  freifeld3: text("freifeld3"),
   dateiname: text("dateiname"),
+  dropboxFileId: text("dropbox_file_id").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

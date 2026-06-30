@@ -79,6 +79,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /invoices/dropbox-sync:
+    post:
+      operationId: triggerDropboxSync
+      tags: [invoices]
+      summary: Trigger Dropbox sync
+      description: Immediately scan the configured Dropbox folder for new PDFs and import them
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DropboxSyncResult"
+        "500":
+          description: Sync error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /invoices/{id}:
     get:
       operationId: getInvoice
@@ -199,9 +219,21 @@ components:
         bemerkung:
           type: ["string", "null"]
           description: Notes / remarks
+        freifeld1:
+          type: ["string", "null"]
+          description: Custom free-text field 1
+        freifeld2:
+          type: ["string", "null"]
+          description: Custom free-text field 2
+        freifeld3:
+          type: ["string", "null"]
+          description: Custom free-text field 3
         dateiname:
           type: ["string", "null"]
           description: Original PDF filename
+        dropboxFileId:
+          type: ["string", "null"]
+          description: Dropbox file ID (set when imported from Dropbox)
         createdAt:
           type: string
           description: Creation timestamp
@@ -226,6 +258,12 @@ components:
         waehrung:
           type: ["string", "null"]
         bemerkung:
+          type: ["string", "null"]
+        freifeld1:
+          type: ["string", "null"]
+        freifeld2:
+          type: ["string", "null"]
+        freifeld3:
           type: ["string", "null"]
 
     InvoiceStats:
@@ -263,6 +301,27 @@ components:
           type: number
         count:
           type: integer
+
+    DropboxSyncResult:
+      type: object
+      required:
+        - imported
+        - skipped
+        - errors
+        - folder
+      properties:
+        imported:
+          type: integer
+          description: Number of new files imported
+        skipped:
+          type: integer
+          description: Number of files already in DB (skipped)
+        errors:
+          type: integer
+          description: Number of files that failed to process
+        folder:
+          type: string
+          description: Dropbox folder that was scanned
 
     ErrorResponse:
       type: object

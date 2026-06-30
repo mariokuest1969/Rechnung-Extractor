@@ -25,4 +25,10 @@ export interface InvoiceUpdate {
   waehrung?: string | null;
   /** @nullable */
   bemerkung?: string | null;
+  /** @nullable */
+  freifeld1?: string | null;
+  /** @nullable */
+  freifeld2?: string | null;
+  /** @nullable */
+  freifeld3?: string | null;
 }

@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  DropboxSyncResult,
   ErrorResponse,
   HealthStatus,
   Invoice,
@@ -357,6 +358,77 @@ export const useUploadInvoices = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUploadInvoicesMutationOptions(options));
+    }
+
+export const getTriggerDropboxSyncUrl = () => {
+
+
+
+
+  return `/api/invoices/dropbox-sync`
+}
+
+/**
+ * Immediately scan the configured Dropbox folder for new PDFs and import them
+ * @summary Trigger Dropbox sync
+ */
+export const triggerDropboxSync = async ( options?: RequestInit): Promise<DropboxSyncResult> => {
+
+  return customFetch<DropboxSyncResult>(getTriggerDropboxSyncUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTriggerDropboxSyncMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof triggerDropboxSync>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof triggerDropboxSync>>, TError,void, TContext> => {
+
+const mutationKey = ['triggerDropboxSync'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof triggerDropboxSync>>, void> = () => {
+
+
+          return  triggerDropboxSync(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TriggerDropboxSyncMutationResult = NonNullable<Awaited<ReturnType<typeof triggerDropboxSync>>>
+
+    export type TriggerDropboxSyncMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Trigger Dropbox sync
+ */
+export const useTriggerDropboxSync = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof triggerDropboxSync>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof triggerDropboxSync>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTriggerDropboxSyncMutationOptions(options));
     }
 
 export const getGetInvoiceUrl = (id: number,) => {

@@ -57,10 +57,30 @@ export interface Invoice {
      */
   bemerkung?: string | null;
   /**
+     * Custom free-text field 1
+     * @nullable
+     */
+  freifeld1?: string | null;
+  /**
+     * Custom free-text field 2
+     * @nullable
+     */
+  freifeld2?: string | null;
+  /**
+     * Custom free-text field 3
+     * @nullable
+     */
+  freifeld3?: string | null;
+  /**
      * Original PDF filename
      * @nullable
      */
   dateiname?: string | null;
+  /**
+     * Dropbox file ID (set when imported from Dropbox)
+     * @nullable
+     */
+  dropboxFileId?: string | null;
   /** Creation timestamp */
   createdAt: string;
 }
@@ -84,6 +104,12 @@ export interface InvoiceUpdate {
   waehrung?: string | null;
   /** @nullable */
   bemerkung?: string | null;
+  /** @nullable */
+  freifeld1?: string | null;
+  /** @nullable */
+  freifeld2?: string | null;
+  /** @nullable */
+  freifeld3?: string | null;
 }
 
 export interface WaehrungGroup {
@@ -98,6 +124,17 @@ export interface InvoiceStats {
   totalNetto: number;
   totalSteuer: number;
   byWaehrung: WaehrungGroup[];
+}
+
+export interface DropboxSyncResult {
+  /** Number of new files imported */
+  imported: number;
+  /** Number of files already in DB (skipped) */
+  skipped: number;
+  /** Number of files that failed to process */
+  errors: number;
+  /** Dropbox folder that was scanned */
+  folder: string;
 }
 
 export interface ErrorResponse {
