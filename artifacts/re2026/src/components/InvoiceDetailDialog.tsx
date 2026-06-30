@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -18,6 +18,7 @@ import {
   Invoice,
   useUpdateInvoice,
   useListLieferanten,
+  useListInvoices,
   getListInvoicesQueryKey,
   getGetInvoiceStatsQueryKey,
 } from "@workspace/api-client-react";
@@ -47,6 +48,8 @@ const CAPTURE_FIELDS: { key: keyof Invoice; label: string }[] = [
 ];
 
 // ─── Single editable field with capture button ───────────────────────────────
+let _datalistCounter = 0;
+
 function DetailField({
   label,
   fieldKey,
@@ -55,6 +58,8 @@ function DetailField({
   onSave,
   captureField,
   onStartCapture,
+  suggestions,
+  quickPicks,
   className = "",
 }: {
   label: string;
@@ -64,12 +69,18 @@ function DetailField({
   onSave: (v: string | null) => void;
   captureField: keyof Invoice | null;
   onStartCapture: (k: keyof Invoice) => void;
+  suggestions?: string[];
+  quickPicks?: (number | string)[];
   className?: string;
 }) {
   const [local, setLocal] = useState(value != null ? String(value) : "");
+  // stable ID for datalist, created once per mount
+  const listId = useRef(`dl-${fieldKey}-${++_datalistCounter}`).current;
+
   useEffect(() => { setLocal(value != null ? String(value) : ""); }, [value]);
 
   const isCapturing = captureField === fieldKey;
+  const hasSuggestions = suggestions && suggestions.length > 0;
 
   return (
     <div className={`flex flex-col gap-0.5 ${className}`}>
@@ -91,6 +102,7 @@ function DetailField({
       <input
         type={type}
         value={local}
+        list={hasSuggestions ? listId : undefined}
         onChange={(e) => setLocal(e.target.value)}
         onBlur={() => onSave(local.trim() || null)}
         className={`border rounded px-2 py-1 text-sm bg-background focus:outline-none focus:ring-1 w-full transition-all ${
@@ -99,6 +111,29 @@ function DetailField({
             : "border-border focus:ring-primary/50"
         }`}
       />
+      {hasSuggestions && (
+        <datalist id={listId}>
+          {suggestions!.map((s) => <option key={s} value={s} />)}
+        </datalist>
+      )}
+      {quickPicks && quickPicks.length > 0 && (
+        <div className="flex gap-1 mt-0.5">
+          {quickPicks.map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => {
+                const str = String(v);
+                setLocal(str);
+                onSave(str);
+              }}
+              className="px-1.5 py-0.5 text-xs rounded border border-border bg-muted/50 hover:bg-muted hover:border-primary/40 transition-colors text-muted-foreground hover:text-foreground"
+            >
+              {v}%
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
