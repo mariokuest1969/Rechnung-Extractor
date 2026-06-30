@@ -232,6 +232,17 @@ router.post("/invoices/:id/reextract", async (req, res): Promise<void> => {
   }
 });
 
+// POST /invoices/bulk-delete
+router.post("/invoices/bulk-delete", async (req, res): Promise<void> => {
+  const { ids } = req.body as { ids?: unknown };
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids muss ein nicht-leeres Array sein" }); return;
+  }
+  const numericIds = (ids as unknown[]).map(Number).filter((n) => !isNaN(n));
+  await db.delete(invoicesTable).where(inArray(invoicesTable.id, numericIds));
+  res.json({ deleted: numericIds.length });
+});
+
 // POST /invoices/dropbox-sync
 router.post("/invoices/dropbox-sync", async (req, res): Promise<void> => {
   try {

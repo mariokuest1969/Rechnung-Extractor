@@ -255,6 +255,31 @@ export function InvoiceTable() {
     },
   });
 
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    try {
+      const res = await fetch("/api/invoices/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      if (!res.ok) throw new Error();
+      const { deleted } = await res.json() as { deleted: number };
+      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() });
+      setSelected(new Set());
+      toast.success(`${deleted} Rechnung${deleted !== 1 ? "en" : ""} gelöscht`);
+    } catch {
+      toast.error("Fehler beim Löschen");
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkDeleteConfirmOpen(false);
+    }
+  };
+
   const openDropboxLink = async (id: number) => {
     try {
       const res = await fetch(`/api/invoices/${id}/dropbox-link`);
@@ -373,6 +398,15 @@ export function InvoiceTable() {
             >
               <Sparkles className="h-3.5 w-3.5 mr-1" />
               Neu extrahieren (KI)
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setBulkDeleteConfirmOpen(true)}
+              disabled={isBulkDeleting}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Löschen
             </Button>
             <Button
               size="sm"
@@ -611,6 +645,28 @@ export function InvoiceTable() {
           </table>
         </div>
       </div>
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{selectedIds.length} Rechnung{selectedIds.length !== 1 ? "en" : ""} löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Diese Aktion löscht {selectedIds.length === 1 ? "die ausgewählte Rechnung" : `alle ${selectedIds.length} ausgewählten Rechnungen`} unwiderruflich aus der Datenbank.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Dialogs */}
       <LieferantenDialog open={lieferantenOpen} onOpenChange={setLieferantenOpen} />
