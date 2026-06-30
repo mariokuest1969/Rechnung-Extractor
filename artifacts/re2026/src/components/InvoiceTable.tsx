@@ -432,6 +432,7 @@ export function InvoiceTable() {
                   />
                 </th>
                 <th className="px-4 py-3 font-medium whitespace-nowrap">Dateiname</th>
+                <th className="px-3 py-3 w-8 text-center" title="PDF öffnen"></th>
                 <th className="px-4 py-3 font-medium whitespace-nowrap">Rechnungssteller</th>
                 <th className="px-4 py-3 font-medium whitespace-nowrap">Lieferant</th>
                 <th className="px-4 py-3 font-medium whitespace-nowrap">Datum</th>
@@ -476,23 +477,25 @@ export function InvoiceTable() {
                     >
                       {inv.dateiname}
                       {inv.dropboxFileId && (
-                        <>
-                          <button
-                            title="PDF in Dropbox öffnen"
-                            onClick={(e) => { e.stopPropagation(); void openDropboxLink(inv.id); }}
-                            className="ml-1 text-blue-400 hover:text-blue-600 transition-colors"
-                          >
-                            <ExternalLink className="inline h-3 w-3" />
-                          </button>
-                          <button
-                            title="Mit KI neu extrahieren"
-                            onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
-                            disabled={reextractMutation.isPending}
-                            className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
-                          >
-                            <Sparkles className="inline h-3 w-3" />
-                          </button>
-                        </>
+                        <button
+                          title="Mit KI neu extrahieren"
+                          onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
+                          disabled={reextractMutation.isPending}
+                          className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
+                        >
+                          <Sparkles className="inline h-3 w-3" />
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {inv.dropboxFileId && (
+                        <button
+                          title="PDF in Dropbox öffnen"
+                          onClick={(e) => { e.stopPropagation(); void openDropboxLink(inv.id); }}
+                          className="text-blue-500 hover:text-blue-700 transition-colors"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-2 font-medium">
