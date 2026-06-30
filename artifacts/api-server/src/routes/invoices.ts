@@ -10,7 +10,7 @@ import {
   GetInvoiceStatsResponse,
 } from "@workspace/api-zod";
 import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
-import { syncDropbox } from "../lib/dropbox-poller";
+import { syncDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -111,6 +111,46 @@ router.post("/invoices/upload", upload.array("files"), async (req, res): Promise
   res.json(created);
 });
 
+// POST /invoices/extract-preview — extract without saving
+router.post("/invoices/extract-preview", upload.array("files"), async (req, res): Promise<void> => {
+  const files = req.files as Express.Multer.File[] | undefined;
+  if (!files || files.length === 0) { res.status(400).json({ error: "Keine PDF-Dateien hochgeladen" }); return; }
+  const previews: Record<string, unknown>[] = [];
+  for (const file of files) {
+    try {
+      const extracted = await extractInvoiceFromPDF(file.buffer, file.originalname);
+      previews.push({ dateiname: file.originalname, ...extracted });
+    } catch (err) {
+      req.log.error({ err, filename: file.originalname }, "Preview extraction failed");
+      previews.push({ dateiname: file.originalname, rechnungssteller: null, datum: null, rechnungsnummer: null, bruttoBetrag: null, steuersatz: null, steuerBetrag: null, nettoBetrag: null, waehrung: "EUR", bemerkung: null });
+    }
+  }
+  res.json(previews);
+});
+
+// POST /invoices/upload-confirmed — save pre-reviewed invoice data
+router.post("/invoices/upload-confirmed", async (req, res): Promise<void> => {
+  const body = req.body as unknown;
+  if (!Array.isArray(body) || body.length === 0) { res.status(400).json({ error: "Keine Daten" }); return; }
+  const created: ReturnType<typeof toApiInvoice>[] = [];
+  for (const item of body as Record<string, unknown>[]) {
+    const [row] = await db.insert(invoicesTable).values({
+      rechnungssteller: (item.rechnungssteller as string) ?? null,
+      datum: (item.datum as string) ?? null,
+      rechnungsnummer: (item.rechnungsnummer as string) ?? null,
+      bruttoBetrag: item.bruttoBetrag != null ? String(item.bruttoBetrag) : null,
+      steuersatz: item.steuersatz != null ? String(item.steuersatz) : null,
+      steuerBetrag: item.steuerBetrag != null ? String(item.steuerBetrag) : null,
+      nettoBetrag: item.nettoBetrag != null ? String(item.nettoBetrag) : null,
+      waehrung: (item.waehrung as string) ?? "EUR",
+      bemerkung: (item.bemerkung as string) ?? null,
+      dateiname: (item.dateiname as string) ?? null,
+    }).returning();
+    if (row) created.push(toApiInvoice(row));
+  }
+  res.json(created);
+});
+
 // PATCH /invoices/bulk-update
 router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   const { ids, fields } = req.body as { ids?: unknown; fields?: unknown };
@@ -138,6 +178,34 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   const numericIds = (ids as unknown[]).map(Number).filter((n) => !isNaN(n));
   await db.update(invoicesTable).set(update).where(inArray(invoicesTable.id, numericIds));
   res.json({ updated: numericIds.length });
+});
+
+// POST /invoices/:id/reextract — re-download from Dropbox and re-run extraction
+router.post("/invoices/:id/reextract", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
+  if (!inv) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
+  if (!inv.dropboxFileId) { res.status(400).json({ error: "Diese Rechnung hat keine Dropbox-Datei" }); return; }
+  try {
+    const buffer = await downloadDropboxFile(inv.dropboxFileId);
+    const extracted = await extractInvoiceFromPDF(buffer, inv.dateiname ?? inv.dropboxFileId);
+    const [updated] = await db.update(invoicesTable).set({
+      rechnungssteller: extracted.rechnungssteller ?? inv.rechnungssteller,
+      datum: extracted.datum ?? inv.datum,
+      rechnungsnummer: extracted.rechnungsnummer ?? inv.rechnungsnummer,
+      bruttoBetrag: extracted.bruttoBetrag != null ? String(extracted.bruttoBetrag) : inv.bruttoBetrag,
+      steuersatz: extracted.steuersatz != null ? String(extracted.steuersatz) : inv.steuersatz,
+      steuerBetrag: extracted.steuerBetrag != null ? String(extracted.steuerBetrag) : inv.steuerBetrag,
+      nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : inv.nettoBetrag,
+      waehrung: extracted.waehrung ?? inv.waehrung,
+      bemerkung: extracted.bemerkung ?? inv.bemerkung,
+    }).where(eq(invoicesTable.id, id)).returning();
+    res.json(toApiInvoice(updated!));
+  } catch (err) {
+    req.log.error({ err, id }, "Reextract failed");
+    res.status(500).json({ error: "Neu-Extraktion fehlgeschlagen" });
+  }
 });
 
 // POST /invoices/dropbox-sync

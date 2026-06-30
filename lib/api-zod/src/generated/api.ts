@@ -236,6 +236,58 @@ export const UploadInvoicesResponse = zod.array(UploadInvoicesResponseItem)
 
 
 /**
+ * Uploads PDFs and returns extracted data for review without persisting
+ * @summary Extract invoice data from PDF without saving
+ */
+export const ExtractPreviewResponseItem = zod.object({
+  "dateiname": zod.string(),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish()
+})
+export const ExtractPreviewResponse = zod.array(ExtractPreviewResponseItem)
+
+
+/**
+ * @summary Re-extract invoice data from Dropbox PDF
+ */
+export const ReextractInvoiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ReextractInvoiceResponse = zod.object({
+  "id": zod.number(),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "dateiname": zod.string().nullish(),
+  "dropboxFileId": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary Bulk update multiple invoices
  */
 export const BulkUpdateInvoicesBody = zod.object({

@@ -17,6 +17,7 @@ export * from './dropboxSyncResult';
 export * from './errorResponse';
 export * from './healthStatus';
 export * from './invoice';
+export * from './invoicePreview';
 export * from './invoiceStats';
 export * from './invoiceUpdate';
 export * from './lieferant';

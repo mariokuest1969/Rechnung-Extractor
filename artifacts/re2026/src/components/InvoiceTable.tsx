@@ -5,6 +5,7 @@ import {
   useDeleteInvoice,
   useTriggerDropboxSync,
   useBulkUpdateInvoices,
+  useReextractInvoice,
   useListLieferanten,
   getListInvoicesQueryKey,
   getGetInvoiceStatsQueryKey,
@@ -26,6 +27,7 @@ import {
   Users,
   BookOpen,
   X,
+  Sparkles,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -228,6 +230,17 @@ export function InvoiceTable() {
     },
   });
 
+  const reextractMutation = useReextractInvoice({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() });
+        toast.success("Rechnung neu extrahiert");
+      },
+      onError: () => toast.error("Neu-Extraktion fehlgeschlagen"),
+    },
+  });
+
   const syncMutation = useTriggerDropboxSync({
     mutation: {
       onSuccess: (data) => {
@@ -332,6 +345,25 @@ export function InvoiceTable() {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => {
+                const dropboxIds = selectedIds.filter(
+                  (id) => invoices?.find((i) => i.id === id)?.dropboxFileId
+                );
+                if (dropboxIds.length === 0) {
+                  toast.error("Nur Dropbox-Rechnungen können neu extrahiert werden");
+                  return;
+                }
+                dropboxIds.forEach((id) => reextractMutation.mutate({ id }));
+                toast.info(`${dropboxIds.length} Datei${dropboxIds.length !== 1 ? "en" : ""} werden neu extrahiert…`);
+              }}
+              disabled={reextractMutation.isPending}
+            >
+              <Sparkles className="h-3.5 w-3.5 mr-1" />
+              Neu extrahieren (KI)
+            </Button>
+            <Button
+              size="sm"
               variant="ghost"
               onClick={() => setSelected(new Set())}
             >
@@ -398,7 +430,14 @@ export function InvoiceTable() {
                     >
                       {inv.dateiname}
                       {inv.dropboxFileId && (
-                        <span className="ml-1 text-[10px] text-blue-400" title="Von Dropbox">↓</span>
+                        <button
+                          title="Mit KI neu extrahieren"
+                          onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
+                          disabled={reextractMutation.isPending}
+                          className="ml-1 text-blue-400 hover:text-primary transition-colors"
+                        >
+                          <Sparkles className="inline h-3 w-3" />
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-2 font-medium">

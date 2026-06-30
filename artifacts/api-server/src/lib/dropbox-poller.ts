@@ -43,7 +43,7 @@ async function listDropboxPDFs(folder: string): Promise<DropboxEntry[]> {
   );
 }
 
-async function downloadDropboxFile(pathDisplay: string): Promise<Buffer> {
+export async function downloadDropboxFile(pathDisplay: string): Promise<Buffer> {
   // Use get_temporary_link with the full path_display string.
   // id:-based addressing fails for files in shared folder namespaces.
   const connectors = new ReplitConnectors();

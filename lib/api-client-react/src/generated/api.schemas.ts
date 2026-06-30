@@ -132,6 +132,28 @@ export interface InvoiceUpdate {
   buchungstext?: string | null;
 }
 
+export interface InvoicePreview {
+  dateiname: string;
+  /** @nullable */
+  rechnungssteller?: string | null;
+  /** @nullable */
+  datum?: string | null;
+  /** @nullable */
+  rechnungsnummer?: string | null;
+  /** @nullable */
+  bruttoBetrag?: number | null;
+  /** @nullable */
+  steuersatz?: number | null;
+  /** @nullable */
+  steuerBetrag?: number | null;
+  /** @nullable */
+  nettoBetrag?: number | null;
+  /** @nullable */
+  waehrung?: string | null;
+  /** @nullable */
+  bemerkung?: string | null;
+}
+
 /**
  * Fields to set on all selected invoices
  */

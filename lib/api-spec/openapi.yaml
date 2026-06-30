@@ -294,6 +294,59 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /invoices/extract-preview:
+    post:
+      operationId: extractPreview
+      tags: [invoices]
+      summary: Extract invoice data from PDF without saving
+      description: Uploads PDFs and returns extracted data for review without persisting
+      responses:
+        "200":
+          description: Extracted invoice previews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoicePreview"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /invoices/{id}/reextract:
+    post:
+      operationId: reextractInvoice
+      tags: [invoices]
+      summary: Re-extract invoice data from Dropbox PDF
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          description: No Dropbox file associated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /invoices/bulk-update:
     patch:
       operationId: bulkUpdateInvoices
@@ -587,6 +640,32 @@ components:
         buchungskonto2Betrag:
           type: ["number", "null"]
         buchungstext:
+          type: ["string", "null"]
+
+    InvoicePreview:
+      type: object
+      required:
+        - dateiname
+      properties:
+        dateiname:
+          type: string
+        rechnungssteller:
+          type: ["string", "null"]
+        datum:
+          type: ["string", "null"]
+        rechnungsnummer:
+          type: ["string", "null"]
+        bruttoBetrag:
+          type: ["number", "null"]
+        steuersatz:
+          type: ["number", "null"]
+        steuerBetrag:
+          type: ["number", "null"]
+        nettoBetrag:
+          type: ["number", "null"]
+        waehrung:
+          type: ["string", "null"]
+        bemerkung:
           type: ["string", "null"]
 
     BulkUpdateBody:

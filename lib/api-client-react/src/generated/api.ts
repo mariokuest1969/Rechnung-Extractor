@@ -30,6 +30,7 @@ import type {
   ErrorResponse,
   HealthStatus,
   Invoice,
+  InvoicePreview,
   InvoiceStats,
   InvoiceUpdate,
   Lieferant,
@@ -1086,6 +1087,147 @@ export const useUploadInvoices = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUploadInvoicesMutationOptions(options));
+    }
+
+export const getExtractPreviewUrl = () => {
+
+
+
+
+  return `/api/invoices/extract-preview`
+}
+
+/**
+ * Uploads PDFs and returns extracted data for review without persisting
+ * @summary Extract invoice data from PDF without saving
+ */
+export const extractPreview = async ( options?: RequestInit): Promise<InvoicePreview[]> => {
+
+  return customFetch<InvoicePreview[]>(getExtractPreviewUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getExtractPreviewMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,void, TContext> => {
+
+const mutationKey = ['extractPreview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof extractPreview>>, void> = () => {
+
+
+          return  extractPreview(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExtractPreviewMutationResult = NonNullable<Awaited<ReturnType<typeof extractPreview>>>
+
+    export type ExtractPreviewMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Extract invoice data from PDF without saving
+ */
+export const useExtractPreview = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof extractPreview>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getExtractPreviewMutationOptions(options));
+    }
+
+export const getReextractInvoiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/invoices/${id}/reextract`
+}
+
+/**
+ * @summary Re-extract invoice data from Dropbox PDF
+ */
+export const reextractInvoice = async (id: number, options?: RequestInit): Promise<Invoice> => {
+
+  return customFetch<Invoice>(getReextractInvoiceUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getReextractInvoiceMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reextractInvoice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reextractInvoice>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['reextractInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reextractInvoice>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  reextractInvoice(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReextractInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof reextractInvoice>>>
+
+    export type ReextractInvoiceMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Re-extract invoice data from Dropbox PDF
+ */
+export const useReextractInvoice = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reextractInvoice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reextractInvoice>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getReextractInvoiceMutationOptions(options));
     }
 
 export const getBulkUpdateInvoicesUrl = () => {
