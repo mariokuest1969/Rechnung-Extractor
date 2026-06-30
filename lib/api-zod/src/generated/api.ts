@@ -56,13 +56,9 @@ export const GetInvoiceStatsResponse = zod.object({
 
 
 /**
- * Upload one or more PDF files and extract invoice data using AI
+ * Upload one or more PDF files and extract invoice data using AI (multipart/form-data)
  * @summary Upload PDF invoices
  */
-export const UploadInvoicesBody = zod.object({
-  "files": zod.array(zod.instanceof(File)).describe('PDF files to process')
-})
-
 export const UploadInvoicesResponseItem = zod.object({
   "id": zod.number(),
   "rechnungssteller": zod.string().nullish().describe('Invoice issuer \/ Lieferant'),

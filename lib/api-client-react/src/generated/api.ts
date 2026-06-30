@@ -24,8 +24,7 @@ import type {
   HealthStatus,
   Invoice,
   InvoiceStats,
-  InvoiceUpdate,
-  InvoiceUpload
+  InvoiceUpdate
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -298,19 +297,17 @@ export const getUploadInvoicesUrl = () => {
 }
 
 /**
- * Upload one or more PDF files and extract invoice data using AI
+ * Upload one or more PDF files and extract invoice data using AI (multipart/form-data)
  * @summary Upload PDF invoices
  */
-export const uploadInvoices = async (invoiceUpload: InvoiceUpload, options?: RequestInit): Promise<Invoice[]> => {
-    const formData = new FormData();
-invoiceUpload.files.forEach(value => formData.append(`files`, value));
+export const uploadInvoices = async ( options?: RequestInit): Promise<Invoice[]> => {
 
   return customFetch<Invoice[]>(getUploadInvoicesUrl(),
   {
     ...options,
     method: 'POST'
-    ,
-    body: formData
+
+
   }
 );}
 
@@ -318,8 +315,8 @@ invoiceUpload.files.forEach(value => formData.append(`files`, value));
 
 
 export const getUploadInvoicesMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadInvoices>>, TError,{data: BodyType<InvoiceUpload>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof uploadInvoices>>, TError,{data: BodyType<InvoiceUpload>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadInvoices>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadInvoices>>, TError,void, TContext> => {
 
 const mutationKey = ['uploadInvoices'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -331,10 +328,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadInvoices>>, {data: BodyType<InvoiceUpload>}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadInvoices>>, void> = () => {
 
-          return  uploadInvoices(data,requestOptions)
+
+          return  uploadInvoices(requestOptions)
         }
 
 
@@ -345,18 +342,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type UploadInvoicesMutationResult = NonNullable<Awaited<ReturnType<typeof uploadInvoices>>>
-    export type UploadInvoicesMutationBody = BodyType<InvoiceUpload>
+
     export type UploadInvoicesMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Upload PDF invoices
  */
 export const useUploadInvoices = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadInvoices>>, TError,{data: BodyType<InvoiceUpload>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadInvoices>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof uploadInvoices>>,
         TError,
-        {data: BodyType<InvoiceUpload>},
+        void,
         TContext
       > => {
       return useMutation(getUploadInvoicesMutationOptions(options));

@@ -11,5 +11,4 @@ export * from './healthStatus';
 export * from './invoice';
 export * from './invoiceStats';
 export * from './invoiceUpdate';
-export * from './invoiceUpload';
 export * from './waehrungGroup';

@@ -228,18 +228,6 @@ components:
         bemerkung:
           type: ["string", "null"]
 
-    InvoiceUpload:
-      type: object
-      required:
-        - files
-      properties:
-        files:
-          type: array
-          items:
-            type: string
-            format: binary
-          description: PDF files to process
-
     InvoiceStats:
       type: object
       required:

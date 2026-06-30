@@ -86,11 +86,6 @@ export interface InvoiceUpdate {
   bemerkung?: string | null;
 }
 
-export interface InvoiceUpload {
-  /** PDF files to process */
-  files: Blob[];
-}
-
 export interface WaehrungGroup {
   waehrung: string;
   totalBrutto: number;
