@@ -19,9 +19,10 @@ import { toast } from "sonner";
 import { formatNumber } from "@/lib/format";
 import { FileText, Loader2, Crosshair, ChevronLeft, ChevronRight } from "lucide-react";
 
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Worker served from /public so the browser can load it without Vite bundling issues
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-// ─── Field labels for capture UI ─────────────────────────────────────────────
+// ─── Field labels ─────────────────────────────────────────────────────────────
 const CAPTURE_FIELDS: { key: keyof Invoice; label: string }[] = [
   { key: "rechnungssteller", label: "Rechnungssteller" },
   { key: "rechnungsnummer",  label: "Rechnungsnummer" },
@@ -38,7 +39,7 @@ const CAPTURE_FIELDS: { key: keyof Invoice; label: string }[] = [
   { key: "freifeld3",        label: "Feld 3" },
 ];
 
-// ─── Inline-edit field ───────────────────────────────────────────────────────
+// ─── Single editable field with capture button ───────────────────────────────
 function DetailField({
   label,
   fieldKey,
@@ -95,7 +96,7 @@ function DetailField({
   );
 }
 
-// ─── PDF Viewer with text-capture support ────────────────────────────────────
+// ─── PDF Viewer ───────────────────────────────────────────────────────────────
 function PdfViewer({
   invoiceId,
   captureField,
@@ -112,7 +113,6 @@ function PdfViewer({
   const [width, setWidth] = useState(600);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Measure container width for responsive rendering
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -122,7 +122,6 @@ function PdfViewer({
     return () => ro.disconnect();
   }, []);
 
-  // Reset on invoice change
   useEffect(() => {
     setPage(1);
     setLoading(true);
@@ -130,28 +129,23 @@ function PdfViewer({
     setNumPages(null);
   }, [invoiceId]);
 
-  // Capture text selection on mouseup
   const handleMouseUp = useCallback(() => {
     if (!captureField) return;
-    const sel = window.getSelection();
-    const text = sel?.toString().trim();
+    const text = window.getSelection()?.toString().trim();
     if (text) onCapture(text);
   }, [captureField, onCapture]);
 
-  const pdfUrl = `/api/invoices/${invoiceId}/pdf`;
-  const captureFieldLabel = CAPTURE_FIELDS.find((f) => f.key === captureField)?.label;
+  const captureLabel = CAPTURE_FIELDS.find((f) => f.key === captureField)?.label;
 
   return (
     <div ref={containerRef} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      {/* Capture hint banner */}
       {captureField && (
-        <div className="mx-4 mt-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-700 rounded text-xs text-blue-700 dark:text-blue-300 flex items-center gap-2">
+        <div className="mx-4 mt-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-700 rounded text-xs text-blue-700 dark:text-blue-300 flex items-center gap-2 shrink-0">
           <Crosshair className="h-3.5 w-3.5 shrink-0 animate-pulse" />
-          <span>Text markieren → wird in <strong>{captureFieldLabel}</strong> übernommen</span>
+          Text markieren → wird in <strong>{captureLabel}</strong> übernommen
         </div>
       )}
 
-      {/* Page navigation */}
       {numPages && numPages > 1 && (
         <div className="flex items-center justify-center gap-2 py-1 text-xs text-muted-foreground shrink-0">
           <button
@@ -172,7 +166,6 @@ function PdfViewer({
         </div>
       )}
 
-      {/* PDF canvas */}
       <div
         className={`flex-1 overflow-y-auto px-4 pb-4 select-text ${captureField ? "cursor-text" : ""}`}
         onMouseUp={handleMouseUp}
@@ -189,20 +182,22 @@ function PdfViewer({
           </div>
         )}
         <Document
-          file={pdfUrl}
+          file={`/api/invoices/${invoiceId}/pdf`}
           onLoadSuccess={({ numPages: n }) => { setNumPages(n); setLoading(false); }}
           onLoadError={() => { setLoading(false); setError(true); }}
-          loading=""
-          noData=""
-          error=""
+          loading={null}
+          noData={null}
+          error={null}
         >
-          <Page
-            pageNumber={page}
-            width={width > 0 ? width : undefined}
-            renderAnnotationLayer={false}
-            renderTextLayer={true}
-            className="shadow-sm"
-          />
+          {!loading && !error && (
+            <Page
+              pageNumber={page}
+              width={width > 0 ? width : undefined}
+              renderAnnotationLayer={false}
+              renderTextLayer
+              className="shadow-sm"
+            />
+          )}
         </Document>
       </div>
     </div>
@@ -219,6 +214,7 @@ export function InvoiceDetailDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  // ALL hooks must come before any conditional return
   const queryClient = useQueryClient();
   const { data: lieferanten = [] } = useListLieferanten();
   const [captureField, setCaptureField] = useState<keyof Invoice | null>(null);
@@ -236,49 +232,47 @@ export function InvoiceDetailDialog({
     },
   });
 
-  if (!invoice) return null;
-
   const handleUpdate = (field: keyof Invoice, rawValue: string | null) => {
+    if (!invoice) return;
     let parsedValue: string | number | null = rawValue;
     if (["bruttoBetrag", "steuersatz", "steuerBetrag", "nettoBetrag"].includes(field as string)) {
-      if (rawValue) {
-        parsedValue = parseFloat(rawValue.replace(",", "."));
-        if (isNaN(parsedValue as number)) parsedValue = null;
-      } else {
-        parsedValue = null;
-      }
+      parsedValue = rawValue ? (parseFloat(rawValue.replace(",", ".")) || null) : null;
     } else if (field === "lieferantId") {
       parsedValue = rawValue ? parseInt(rawValue, 10) : null;
     }
     updateMutation.mutate({ id: invoice.id, data: { [field]: parsedValue } });
   };
 
-  // Called when user selects text in PDF while a capture field is active
   const handleCapture = useCallback((text: string) => {
-    if (!captureField) return;
-    const label = CAPTURE_FIELDS.find((f) => f.key === captureField)?.label ?? captureField;
-    handleUpdate(captureField, text);
+    if (!captureField || !invoice) return;
+    const label = CAPTURE_FIELDS.find((f) => f.key === captureField)?.label ?? String(captureField);
+    updateMutation.mutate({
+      id: invoice.id,
+      data: { [captureField]: text },
+    });
     toast.success(`"${text.slice(0, 40)}${text.length > 40 ? "…" : ""}" → ${label}`);
     setCaptureField(null);
-  }, [captureField]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureField, invoice?.id]);
+
+  // Conditional return AFTER all hooks
+  if (!invoice) return null;
 
   const fieldProps = (key: keyof Invoice) => ({
     fieldKey: key,
     captureField,
-    onStartCapture: (k: keyof Invoice) =>
-      setCaptureField((prev) => (prev === k ? null : k)),
+    onStartCapture: (k: keyof Invoice) => setCaptureField((prev) => (prev === k ? null : k)),
     onSave: (v: string | null) => handleUpdate(key, v),
   });
 
   const title = invoice.rechnungssteller || invoice.dateiname || `Rechnung #${invoice.id}`;
-  const hasPdf = !!invoice.dropboxFileId;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[96vw] w-[96vw] h-[92vh] p-0 gap-0 flex overflow-hidden">
         <DialogTitle className="sr-only">{title}</DialogTitle>
 
-        {/* ── Left: PDF viewer ──────────────────────────────────────────── */}
+        {/* ── Left: PDF viewer ─────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0 border-r border-border overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border bg-muted/20 flex items-center gap-2 shrink-0">
             <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -287,7 +281,7 @@ export function InvoiceDetailDialog({
             </span>
           </div>
 
-          {hasPdf ? (
+          {invoice.dropboxFileId ? (
             <PdfViewer
               invoiceId={invoice.id}
               captureField={captureField}
@@ -304,28 +298,16 @@ export function InvoiceDetailDialog({
           )}
         </div>
 
-        {/* ── Right: editable form ──────────────────────────────────────── */}
+        {/* ── Right: form ──────────────────────────────────────────────── */}
         <div className="w-[400px] shrink-0 flex flex-col overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border bg-muted/20 shrink-0">
             <p className="text-sm font-semibold truncate">{title}</p>
-            <p className="text-xs text-muted-foreground">
-              Rechnung #{invoice.id}
-              {captureField && (
-                <span className="ml-2 text-blue-500 font-medium">
-                  · Klicke <Crosshair className="inline h-3 w-3" /> zum Abbrechen
-                </span>
-              )}
-            </p>
+            <p className="text-xs text-muted-foreground">Rechnung #{invoice.id}</p>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            <DetailField
-              label="Rechnungssteller"
-              value={invoice.rechnungssteller}
-              {...fieldProps("rechnungssteller")}
-            />
+            <DetailField label="Rechnungssteller" value={invoice.rechnungssteller} {...fieldProps("rechnungssteller")} />
 
-            {/* Lieferant */}
             <div className="flex flex-col gap-0.5">
               <label className="text-xs font-medium text-muted-foreground">Lieferant</label>
               <select
@@ -343,86 +325,33 @@ export function InvoiceDetailDialog({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <DetailField
-                label="Datum"
-                value={invoice.datum}
-                type="date"
-                {...fieldProps("datum")}
-              />
-              <DetailField
-                label="Rechnungsnummer"
-                value={invoice.rechnungsnummer}
-                {...fieldProps("rechnungsnummer")}
-              />
+              <DetailField label="Datum" value={invoice.datum} type="date" {...fieldProps("datum")} />
+              <DetailField label="Rechnungsnummer" value={invoice.rechnungsnummer} {...fieldProps("rechnungsnummer")} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <DetailField
-                label="Brutto"
-                value={invoice.bruttoBetrag != null ? formatNumber(invoice.bruttoBetrag) : null}
-                {...fieldProps("bruttoBetrag")}
-              />
-              <DetailField
-                label="MwSt %"
-                value={invoice.steuersatz != null ? String(invoice.steuersatz) : null}
-                {...fieldProps("steuersatz")}
-              />
+              <DetailField label="Brutto" value={invoice.bruttoBetrag != null ? formatNumber(invoice.bruttoBetrag) : null} {...fieldProps("bruttoBetrag")} />
+              <DetailField label="MwSt %" value={invoice.steuersatz != null ? String(invoice.steuersatz) : null} {...fieldProps("steuersatz")} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <DetailField
-                label="Steuer"
-                value={invoice.steuerBetrag != null ? formatNumber(invoice.steuerBetrag) : null}
-                {...fieldProps("steuerBetrag")}
-              />
-              <DetailField
-                label="Netto"
-                value={invoice.nettoBetrag != null ? formatNumber(invoice.nettoBetrag) : null}
-                {...fieldProps("nettoBetrag")}
-              />
+              <DetailField label="Steuer" value={invoice.steuerBetrag != null ? formatNumber(invoice.steuerBetrag) : null} {...fieldProps("steuerBetrag")} />
+              <DetailField label="Netto" value={invoice.nettoBetrag != null ? formatNumber(invoice.nettoBetrag) : null} {...fieldProps("nettoBetrag")} />
             </div>
 
-            <DetailField
-              label="Währung"
-              value={invoice.waehrung}
-              {...fieldProps("waehrung")}
-            />
+            <DetailField label="Währung" value={invoice.waehrung} {...fieldProps("waehrung")} />
 
             <div className="border-t border-border pt-3 space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Buchung &amp; Notizen
-              </p>
-              <DetailField
-                label="Buchungstext"
-                value={invoice.buchungstext}
-                {...fieldProps("buchungstext")}
-              />
-              <DetailField
-                label="Bemerkung"
-                value={invoice.bemerkung}
-                {...fieldProps("bemerkung")}
-              />
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buchung &amp; Notizen</p>
+              <DetailField label="Buchungstext" value={invoice.buchungstext} {...fieldProps("buchungstext")} />
+              <DetailField label="Bemerkung" value={invoice.bemerkung} {...fieldProps("bemerkung")} />
             </div>
 
             <div className="border-t border-border pt-3 space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Freifelder
-              </p>
-              <DetailField
-                label="Feld 1"
-                value={invoice.freifeld1}
-                {...fieldProps("freifeld1")}
-              />
-              <DetailField
-                label="Feld 2"
-                value={invoice.freifeld2}
-                {...fieldProps("freifeld2")}
-              />
-              <DetailField
-                label="Feld 3"
-                value={invoice.freifeld3}
-                {...fieldProps("freifeld3")}
-              />
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Freifelder</p>
+              <DetailField label="Feld 1" value={invoice.freifeld1} {...fieldProps("freifeld1")} />
+              <DetailField label="Feld 2" value={invoice.freifeld2} {...fieldProps("freifeld2")} />
+              <DetailField label="Feld 3" value={invoice.freifeld3} {...fieldProps("freifeld3")} />
             </div>
           </div>
         </div>
