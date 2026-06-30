@@ -97,9 +97,18 @@ function extractWithRegex(text: string): ExtractedInvoice {
     result.bruttoBetrag = parseFloat(num) || null;
   }
 
-  // Tax rate
-  const taxRateMatch = text.match(/(\d+)[,.]?\d*\s*%\s*(?:MwSt|USt|Steuer|VAT)/i);
-  if (taxRateMatch) result.steuersatz = parseFloat(taxRateMatch[1]);
+  // Tax rate — only accept values that look like real VAT rates (1–50%)
+  // Pattern 1: "19% MwSt" / "19,0% MwSt"
+  const taxRateMatch1 = text.match(/(\d{1,2}[,.]\d*|\d{1,2})\s*%\s*(?:MwSt|USt|Steuer|VAT)/i);
+  // Pattern 2: "MwSt 19%" / "MwSt: 19,0%"
+  const taxRateMatch2 = text.match(/(?:MwSt|USt|Steuer|VAT)[.:\s]*(\d{1,2}[,.]\d*|\d{1,2})\s*%/i);
+  const taxRateRaw = taxRateMatch1?.[1] ?? taxRateMatch2?.[1] ?? null;
+  if (taxRateRaw !== null) {
+    const parsed = parseFloat(taxRateRaw.replace(",", "."));
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 50) {
+      result.steuersatz = parsed;
+    }
+  }
 
   // Tax amount
   const taxMatch = text.match(

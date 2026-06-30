@@ -8,6 +8,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Invoice,
   useUpdateInvoice,
   useListLieferanten,
@@ -17,7 +24,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatNumber } from "@/lib/format";
-import { FileText, Loader2, Crosshair, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileText, Loader2, Crosshair, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 // Worker served from /public so the browser can load it without Vite bundling issues
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -269,7 +276,10 @@ export function InvoiceDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[96vw] w-[96vw] h-[92vh] p-0 gap-0 flex overflow-hidden">
+      <DialogContent
+        className="max-w-[96vw] w-[96vw] h-[92vh] p-0 gap-0 flex overflow-hidden"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogTitle className="sr-only">{title}</DialogTitle>
 
         {/* ── Left: PDF viewer ─────────────────────────────────────────── */}
@@ -300,9 +310,18 @@ export function InvoiceDetailDialog({
 
         {/* ── Right: form ──────────────────────────────────────────────── */}
         <div className="w-[400px] shrink-0 flex flex-col overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border bg-muted/20 shrink-0">
-            <p className="text-sm font-semibold truncate">{title}</p>
-            <p className="text-xs text-muted-foreground">Rechnung #{invoice.id}</p>
+          <div className="px-4 py-2.5 border-b border-border bg-muted/20 shrink-0 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate">{title}</p>
+              <p className="text-xs text-muted-foreground">Rechnung #{invoice.id}</p>
+            </div>
+            <button
+              onClick={() => onOpenChange(false)}
+              className="shrink-0 p-1 rounded hover:bg-muted/60 text-muted-foreground transition-colors mt-0.5"
+              title="Schließen"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -310,18 +329,22 @@ export function InvoiceDetailDialog({
 
             <div className="flex flex-col gap-0.5">
               <label className="text-xs font-medium text-muted-foreground">Lieferant</label>
-              <select
-                value={invoice.lieferantId != null ? String(invoice.lieferantId) : ""}
-                onChange={(e) => handleUpdate("lieferantId", e.target.value || null)}
-                className="border border-border rounded px-2 py-1 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary/50 w-full"
+              <Select
+                value={invoice.lieferantId != null ? String(invoice.lieferantId) : "none"}
+                onValueChange={(v) => handleUpdate("lieferantId", v === "none" ? null : v)}
               >
-                <option value="">— keiner —</option>
-                {lieferanten.map((l) => (
-                  <option key={l.id} value={String(l.id)}>
-                    {l.name}{l.kuerzel ? ` (${l.kuerzel})` : ""}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="— keiner —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— keiner —</SelectItem>
+                  {lieferanten.map((l) => (
+                    <SelectItem key={l.id} value={String(l.id)}>
+                      {l.name}{l.kuerzel ? ` (${l.kuerzel})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
