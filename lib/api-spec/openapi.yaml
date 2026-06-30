@@ -62,13 +62,7 @@ paths:
       operationId: uploadInvoices
       tags: [invoices]
       summary: Upload PDF invoices
-      description: Upload one or more PDF files and extract invoice data using AI
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: "#/components/schemas/InvoiceUpload"
+      description: Upload one or more PDF files and extract invoice data using AI (multipart/form-data)
       responses:
         "200":
           description: Extracted invoices
