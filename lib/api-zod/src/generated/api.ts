@@ -85,6 +85,26 @@ export const UploadInvoicesResponse = zod.array(UploadInvoicesResponseItem)
 
 
 /**
+ * @summary Get current settings
+ */
+export const GetSettingsResponse = zod.object({
+  "dropboxFolder": zod.string().describe('Dropbox folder path to monitor for new PDF invoices')
+})
+
+
+/**
+ * @summary Update settings
+ */
+export const UpdateSettingsBody = zod.object({
+  "dropboxFolder": zod.string().optional().describe('Dropbox folder path to monitor for new PDF invoices')
+})
+
+export const UpdateSettingsResponse = zod.object({
+  "dropboxFolder": zod.string().describe('Dropbox folder path to monitor for new PDF invoices')
+})
+
+
+/**
  * Immediately scan the configured Dropbox folder for new PDFs and import them
  * @summary Trigger Dropbox sync
  */

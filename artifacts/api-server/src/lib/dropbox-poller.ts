@@ -1,14 +1,12 @@
 // Dropbox integration via Replit Connectors SDK
-// Polls /Apps/roc.Kasse/RE-2026 (or DROPBOX_FOLDER env) for new PDF files
+// Polls the configured Dropbox folder (stored in DB settings) for new PDF files
 // and automatically imports them.
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { eq } from "drizzle-orm";
 import { db, invoicesTable } from "@workspace/db";
+import { getDropboxFolder } from "../routes/settings";
 import { extractInvoiceFromPDF } from "./pdf-extractor";
 import { logger } from "./logger";
-
-export const DROPBOX_FOLDER =
-  process.env["DROPBOX_FOLDER"] ?? "/Apps/roc.Kasse/RE-2026";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -26,11 +24,11 @@ interface ListFolderResult {
   cursor: string;
 }
 
-async function listDropboxPDFs(): Promise<DropboxEntry[]> {
+async function listDropboxPDFs(folder: string): Promise<DropboxEntry[]> {
   const connectors = new ReplitConnectors();
   const response = await connectors.proxy("dropbox", "/2/files/list_folder", {
     method: "POST",
-    body: JSON.stringify({ path: DROPBOX_FOLDER, recursive: false }),
+    body: JSON.stringify({ path: folder, recursive: false }),
     headers: { "Content-Type": "application/json" },
   });
 
@@ -89,25 +87,19 @@ export interface SyncResult {
 }
 
 export async function syncDropbox(): Promise<SyncResult> {
-  const result: SyncResult = {
-    imported: 0,
-    skipped: 0,
-    errors: 0,
-    folder: DROPBOX_FOLDER,
-  };
+  // Read folder from DB each run so live changes take effect immediately
+  const folder = await getDropboxFolder();
+  const result: SyncResult = { imported: 0, skipped: 0, errors: 0, folder };
 
   let files: DropboxEntry[];
   try {
-    files = await listDropboxPDFs();
+    files = await listDropboxPDFs(folder);
   } catch (err) {
     logger.error({ err }, "Dropbox list_folder failed");
     throw err;
   }
 
-  logger.info(
-    { count: files.length, folder: DROPBOX_FOLDER },
-    "Dropbox: found PDF files"
-  );
+  logger.info({ count: files.length, folder }, "Dropbox: found PDF files");
 
   for (const file of files) {
     // Skip if already imported (track by Dropbox file ID to survive renames)
@@ -123,7 +115,6 @@ export async function syncDropbox(): Promise<SyncResult> {
     }
 
     try {
-      // Use path_display (original casing) for the download path
       const buffer = await downloadDropboxFile(file.path_display);
       const extracted = await extractInvoiceFromPDF(buffer, file.name);
 
@@ -132,15 +123,11 @@ export async function syncDropbox(): Promise<SyncResult> {
         datum: extracted.datum,
         rechnungsnummer: extracted.rechnungsnummer,
         bruttoBetrag:
-          extracted.bruttoBetrag != null
-            ? String(extracted.bruttoBetrag)
-            : null,
+          extracted.bruttoBetrag != null ? String(extracted.bruttoBetrag) : null,
         steuersatz:
           extracted.steuersatz != null ? String(extracted.steuersatz) : null,
         steuerBetrag:
-          extracted.steuerBetrag != null
-            ? String(extracted.steuerBetrag)
-            : null,
+          extracted.steuerBetrag != null ? String(extracted.steuerBetrag) : null,
         nettoBetrag:
           extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : null,
         waehrung: extracted.waehrung ?? "EUR",
@@ -153,10 +140,7 @@ export async function syncDropbox(): Promise<SyncResult> {
       logger.info({ filename: file.name }, "Dropbox: file imported");
     } catch (err) {
       result.errors++;
-      logger.error(
-        { err, filename: file.name },
-        "Dropbox: failed to import file"
-      );
+      logger.error({ err, filename: file.name }, "Dropbox: failed to import file");
     }
   }
 
@@ -177,8 +161,5 @@ export function startDropboxPoller(): void {
     );
   }, POLL_INTERVAL_MS);
 
-  logger.info(
-    { intervalMs: POLL_INTERVAL_MS, folder: DROPBOX_FOLDER },
-    "Dropbox poller started"
-  );
+  logger.info({ intervalMs: POLL_INTERVAL_MS }, "Dropbox poller started");
 }

@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: invoices
     description: Invoice management operations
+  - name: settings
+    description: Application settings
 paths:
   /healthz:
     get:
@@ -72,6 +74,42 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Invoice"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get current settings
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppSettingsUpdate"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
         "400":
           description: Bad request
           content:
@@ -322,6 +360,22 @@ components:
         folder:
           type: string
           description: Dropbox folder that was scanned
+
+    AppSettings:
+      type: object
+      required:
+        - dropboxFolder
+      properties:
+        dropboxFolder:
+          type: string
+          description: Dropbox folder path to monitor for new PDF invoices
+
+    AppSettingsUpdate:
+      type: object
+      properties:
+        dropboxFolder:
+          type: string
+          description: Dropbox folder path to monitor for new PDF invoices
 
     ErrorResponse:
       type: object

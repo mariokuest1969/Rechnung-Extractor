@@ -137,6 +137,16 @@ export interface DropboxSyncResult {
   folder: string;
 }
 
+export interface AppSettings {
+  /** Dropbox folder path to monitor for new PDF invoices */
+  dropboxFolder: string;
+}
+
+export interface AppSettingsUpdate {
+  /** Dropbox folder path to monitor for new PDF invoices */
+  dropboxFolder?: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }
