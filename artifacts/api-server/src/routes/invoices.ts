@@ -180,6 +180,27 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   res.json({ updated: numericIds.length });
 });
 
+// GET /invoices/:id/pdf — stream PDF inline from Dropbox
+router.get("/invoices/:id/pdf", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
+  if (!inv) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
+  if (!inv.dropboxFileId) { res.status(400).json({ error: "Keine Dropbox-Datei verknüpft" }); return; }
+  try {
+    const buffer = await downloadDropboxFile(inv.dropboxFileId);
+    const filename = (inv.dateiname ?? "rechnung.pdf").replace(/"/g, "");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(buffer);
+  } catch (err) {
+    req.log.error({ err, id }, "pdf-stream failed");
+    res.status(500).json({ error: "Fehler beim Laden der PDF" });
+  }
+});
+
 // GET /invoices/:id/dropbox-link — return temporary Dropbox download URL
 router.get("/invoices/:id/dropbox-link", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);

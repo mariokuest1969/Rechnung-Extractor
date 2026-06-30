@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { EditableCell } from "./EditableCell";
 import { LieferantenDialog } from "./LieferantenDialog";
 import { BuchungsDialog } from "./BuchungsDialog";
+import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
 import { formatNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -260,6 +261,8 @@ export function InvoiceTable() {
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [buchungsOpen, setBuchungsOpen] = useState(false);
   const [buchungsInvoice, setBuchungsInvoice] = useState<Invoice | null>(null);
+  const [detailInvoiceId, setDetailInvoiceId] = useState<number | null>(null);
+  const detailInvoice = invoices?.find((i) => i.id === detailInvoiceId) ?? null;
 
   const openBulkBuchung = () => {
     setBuchungsInvoice(null);
@@ -618,9 +621,10 @@ export function InvoiceTable() {
                 return (
                   <tr
                     key={inv.id}
-                    className={`hover:bg-muted/10 transition-colors group ${isSelected ? "bg-primary/5" : ""}`}
+                    className={`hover:bg-muted/30 transition-colors group cursor-pointer ${isSelected ? "bg-primary/5" : ""}`}
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest("input, button, [role=checkbox]")) return;
+                      setDetailInvoiceId(inv.id);
                     }}
                   >
                     <td className="px-3 py-2 text-center">
@@ -829,6 +833,13 @@ export function InvoiceTable() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Detail View Dialog */}
+      <InvoiceDetailDialog
+        invoice={detailInvoice}
+        open={detailInvoiceId !== null}
+        onOpenChange={(o) => { if (!o) setDetailInvoiceId(null); }}
+      />
 
       {/* Dialogs */}
       <LieferantenDialog open={lieferantenOpen} onOpenChange={setLieferantenOpen} />
