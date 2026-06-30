@@ -29,6 +29,10 @@ import {
   X,
   Sparkles,
   ExternalLink,
+  ChevronUp,
+  ChevronDown,
+  Search,
+  ChevronsUpDown,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -176,9 +180,68 @@ export function InvoiceTable() {
     return m;
   }, [lieferanten]);
 
+  // ── Filter state ──────────────────────────────────────────────────────────
+  const [searchText, setSearchText] = useState("");
+  const [filterLieferantId, setFilterLieferantId] = useState<string>("all");
+  const [filterDatumVon, setFilterDatumVon] = useState("");
+  const [filterDatumBis, setFilterDatumBis] = useState("");
+
+  // ── Sort state ────────────────────────────────────────────────────────────
+  type SortField = "lieferant" | "datum" | "rnr";
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortField(field); setSortDir("asc"); }
+  };
+
+  // ── Filtered + sorted invoices ────────────────────────────────────────────
+  const displayInvoices = useMemo(() => {
+    let list = invoices ?? [];
+    const q = searchText.trim().toLowerCase();
+    if (q) {
+      list = list.filter((inv) => {
+        const lieferantName = inv.lieferantId ? (lieferantenMap.get(inv.lieferantId) ?? "") : "";
+        return [
+          inv.dateiname, inv.rechnungssteller, inv.rechnungsnummer,
+          inv.bemerkung, inv.freifeld1, inv.freifeld2, inv.freifeld3,
+          inv.datum, inv.waehrung, lieferantName,
+        ].some((f) => f?.toLowerCase().includes(q));
+      });
+    }
+    if (filterLieferantId !== "all") {
+      const lid = Number(filterLieferantId);
+      list = list.filter((inv) => inv.lieferantId === lid);
+    }
+    if (filterDatumVon) list = list.filter((inv) => (inv.datum ?? "") >= filterDatumVon);
+    if (filterDatumBis) list = list.filter((inv) => (inv.datum ?? "") <= filterDatumBis);
+    if (sortField) {
+      list = [...list].sort((a, b) => {
+        let va = "", vb = "";
+        if (sortField === "lieferant") {
+          va = a.lieferantId ? (lieferantenMap.get(a.lieferantId) ?? "") : "";
+          vb = b.lieferantId ? (lieferantenMap.get(b.lieferantId) ?? "") : "";
+        } else if (sortField === "datum") {
+          va = a.datum ?? ""; vb = b.datum ?? "";
+        } else if (sortField === "rnr") {
+          va = a.rechnungsnummer ?? ""; vb = b.rechnungsnummer ?? "";
+        }
+        return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+    }
+    return list;
+  }, [invoices, searchText, filterLieferantId, filterDatumVon, filterDatumBis, sortField, sortDir, lieferantenMap]);
+
+  const hasActiveFilter = searchText || filterLieferantId !== "all" || filterDatumVon || filterDatumBis;
+
+  const clearFilters = () => {
+    setSearchText(""); setFilterLieferantId("all"); setFilterDatumVon(""); setFilterDatumBis("");
+  };
+
   // Selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const allIds = useMemo(() => invoices?.map((i) => i.id) ?? [], [invoices]);
+  const allIds = useMemo(() => displayInvoices.map((i) => i.id), [displayInvoices]);
   const allChecked = allIds.length > 0 && allIds.every((id) => selected.has(id));
   const someChecked = selected.size > 0 && !allChecked;
 
@@ -358,6 +421,65 @@ export function InvoiceTable() {
           </div>
         </div>
 
+        {/* Filter Bar */}
+        <div className="px-4 py-2 border-b border-border bg-muted/10 flex flex-wrap items-end gap-3">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Suche in allen Feldern…"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="w-full pl-7 pr-2 py-1.5 text-sm border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground whitespace-nowrap">Lieferant</label>
+            <select
+              value={filterLieferantId}
+              onChange={(e) => setFilterLieferantId(e.target.value)}
+              className="text-sm border border-border rounded px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+            >
+              <option value="all">Alle</option>
+              {lieferanten.map((l) => (
+                <option key={l.id} value={String(l.id)}>{l.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground whitespace-nowrap">Datum von</label>
+            <input
+              type="date"
+              value={filterDatumVon}
+              onChange={(e) => setFilterDatumVon(e.target.value)}
+              className="text-sm border border-border rounded px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground whitespace-nowrap">bis</label>
+            <input
+              type="date"
+              value={filterDatumBis}
+              onChange={(e) => setFilterDatumBis(e.target.value)}
+              className="text-sm border border-border rounded px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          </div>
+          {hasActiveFilter && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              title="Filter zurücksetzen"
+            >
+              <X className="h-3.5 w-3.5" /> Filter löschen
+            </button>
+          )}
+          {hasActiveFilter && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              {displayInvoices.length} von {invoices?.length ?? 0}
+            </span>
+          )}
+        </div>
+
         {/* Bulk Action Bar */}
         {selected.size > 0 && (
           <div className="px-4 py-2 bg-primary/5 border-b border-primary/20 flex items-center gap-3 flex-wrap">
@@ -423,6 +545,7 @@ export function InvoiceTable() {
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground bg-muted/30 border-b border-border">
               <tr>
+                <th className="px-3 py-3 w-8 text-center" title="PDF öffnen"></th>
                 <th className="px-3 py-3 w-10">
                   <Checkbox
                     checked={allChecked}
@@ -432,11 +555,40 @@ export function InvoiceTable() {
                   />
                 </th>
                 <th className="px-4 py-3 font-medium whitespace-nowrap">Dateiname</th>
-                <th className="px-3 py-3 w-8 text-center" title="PDF öffnen"></th>
                 <th className="px-4 py-3 font-medium whitespace-nowrap">Rechnungssteller</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Lieferant</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Datum</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">RNR</th>
+                <th className="px-4 py-3 font-medium whitespace-nowrap">
+                  <button
+                    onClick={() => toggleSort("lieferant")}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    Lieferant
+                    {sortField === "lieferant" ? (
+                      sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                    ) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                </th>
+                <th className="px-4 py-3 font-medium whitespace-nowrap">
+                  <button
+                    onClick={() => toggleSort("datum")}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    Datum
+                    {sortField === "datum" ? (
+                      sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                    ) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                </th>
+                <th className="px-4 py-3 font-medium whitespace-nowrap">
+                  <button
+                    onClick={() => toggleSort("rnr")}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    RNR
+                    {sortField === "rnr" ? (
+                      sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                    ) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                </th>
                 <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Brutto</th>
                 <th className="px-4 py-3 font-medium text-right whitespace-nowrap">MwSt %</th>
                 <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Steuer</th>
@@ -451,7 +603,14 @@ export function InvoiceTable() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {invoices.map((inv) => {
+              {displayInvoices.length === 0 && (
+                <tr>
+                  <td colSpan={20} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    Keine Rechnungen entsprechen den Filterkriterien.
+                  </td>
+                </tr>
+              )}
+              {displayInvoices.map((inv) => {
                 const isSelected = selected.has(inv.id);
                 const lieferantName = inv.lieferantId ? lieferantenMap.get(inv.lieferantId) : null;
                 const hasBuchung = !!(inv.buchungskonto1 || inv.buchungskonto2);
@@ -464,6 +623,17 @@ export function InvoiceTable() {
                       if ((e.target as HTMLElement).closest("input, button, [role=checkbox]")) return;
                     }}
                   >
+                    <td className="px-3 py-2 text-center">
+                      {inv.dropboxFileId && (
+                        <button
+                          title="PDF in Dropbox öffnen"
+                          onClick={(e) => { e.stopPropagation(); void openDropboxLink(inv.id); }}
+                          className="text-blue-500 hover:text-blue-700 transition-colors"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       <Checkbox
                         checked={isSelected}
@@ -484,17 +654,6 @@ export function InvoiceTable() {
                           className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
                         >
                           <Sparkles className="inline h-3 w-3" />
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      {inv.dropboxFileId && (
-                        <button
-                          title="PDF in Dropbox öffnen"
-                          onClick={(e) => { e.stopPropagation(); void openDropboxLink(inv.id); }}
-                          className="text-blue-500 hover:text-blue-700 transition-colors"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </td>
