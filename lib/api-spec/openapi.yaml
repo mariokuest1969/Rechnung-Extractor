@@ -420,8 +420,11 @@ components:
       properties:
         status:
           type: string
+        openaiConfigured:
+          type: boolean
       required:
         - status
+        - openaiConfigured
 
     AppSettings:
       type: object

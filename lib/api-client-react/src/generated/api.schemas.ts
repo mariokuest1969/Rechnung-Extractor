@@ -7,6 +7,7 @@
  */
 export interface HealthStatus {
   status: string;
+  openaiConfigured: boolean;
 }
 
 export interface AppSettings {
