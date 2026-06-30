@@ -9,79 +9,86 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface AppSettings {
+  dropboxFolder: string;
+}
+
+export interface AppSettingsUpdate {
+  dropboxFolder?: string;
+}
+
+export interface Lieferant {
+  id: number;
+  name: string;
+  /** @nullable */
+  kuerzel?: string | null;
+  /** @nullable */
+  steuernummer?: string | null;
+  createdAt: string;
+}
+
+export interface LieferantCreate {
+  name: string;
+  /** @nullable */
+  kuerzel?: string | null;
+  /** @nullable */
+  steuernummer?: string | null;
+}
+
+export interface Buchungskonto {
+  id: number;
+  kontonummer: string;
+  bezeichnung: string;
+  createdAt: string;
+}
+
+export interface BuchungskontoCreate {
+  kontonummer: string;
+  bezeichnung: string;
+}
+
 export interface Invoice {
   id: number;
-  /**
-     * Invoice issuer / Lieferant
-     * @nullable
-     */
+  /** @nullable */
   rechnungssteller?: string | null;
-  /**
-     * Invoice date (ISO string)
-     * @nullable
-     */
+  /** @nullable */
   datum?: string | null;
-  /**
-     * Invoice number
-     * @nullable
-     */
+  /** @nullable */
   rechnungsnummer?: string | null;
-  /**
-     * Gross amount
-     * @nullable
-     */
+  /** @nullable */
   bruttoBetrag?: number | null;
-  /**
-     * Tax rate in percent (e.g. 20 for 20%)
-     * @nullable
-     */
+  /** @nullable */
   steuersatz?: number | null;
-  /**
-     * Tax amount
-     * @nullable
-     */
+  /** @nullable */
   steuerBetrag?: number | null;
-  /**
-     * Net amount
-     * @nullable
-     */
+  /** @nullable */
   nettoBetrag?: number | null;
-  /**
-     * Currency (e.g. EUR)
-     * @nullable
-     */
+  /** @nullable */
   waehrung?: string | null;
-  /**
-     * Notes / remarks
-     * @nullable
-     */
+  /** @nullable */
   bemerkung?: string | null;
-  /**
-     * Custom free-text field 1
-     * @nullable
-     */
+  /** @nullable */
   freifeld1?: string | null;
-  /**
-     * Custom free-text field 2
-     * @nullable
-     */
+  /** @nullable */
   freifeld2?: string | null;
-  /**
-     * Custom free-text field 3
-     * @nullable
-     */
+  /** @nullable */
   freifeld3?: string | null;
-  /**
-     * Original PDF filename
-     * @nullable
-     */
+  /** @nullable */
+  lieferantId?: number | null;
+  /** @nullable */
+  buchungskonto1?: string | null;
+  /** @nullable */
+  buchungskonto1Betrag?: number | null;
+  /** @nullable */
+  buchungskonto2?: string | null;
+  /** @nullable */
+  buchungskonto2Betrag?: number | null;
+  /** @nullable */
+  buchungstext?: string | null;
+  /** @nullable */
   dateiname?: string | null;
-  /**
-     * Dropbox file ID (set when imported from Dropbox)
-     * @nullable
-     */
+  /** @nullable */
   dropboxFileId?: string | null;
-  /** Creation timestamp */
   createdAt: string;
 }
 
@@ -110,6 +117,55 @@ export interface InvoiceUpdate {
   freifeld2?: string | null;
   /** @nullable */
   freifeld3?: string | null;
+  /** @nullable */
+  lieferantId?: number | null;
+  /** @nullable */
+  buchungskonto1?: string | null;
+  /** @nullable */
+  buchungskonto1Betrag?: number | null;
+  /** @nullable */
+  buchungskonto2?: string | null;
+  /** @nullable */
+  buchungskonto2Betrag?: number | null;
+  /** @nullable */
+  buchungstext?: string | null;
+}
+
+/**
+ * Fields to set on all selected invoices
+ */
+export type BulkUpdateBodyFields = {
+  /** @nullable */
+  rechnungssteller?: string | null;
+  /** @nullable */
+  lieferantId?: number | null;
+  /** @nullable */
+  buchungskonto1?: string | null;
+  /** @nullable */
+  buchungskonto1Betrag?: number | null;
+  /** @nullable */
+  buchungskonto2?: string | null;
+  /** @nullable */
+  buchungskonto2Betrag?: number | null;
+  /** @nullable */
+  buchungstext?: string | null;
+  /** @nullable */
+  freifeld1?: string | null;
+  /** @nullable */
+  freifeld2?: string | null;
+  /** @nullable */
+  freifeld3?: string | null;
+};
+
+export interface BulkUpdateBody {
+  /** Invoice IDs to update */
+  ids: number[];
+  /** Fields to set on all selected invoices */
+  fields: BulkUpdateBodyFields;
+}
+
+export interface BulkUpdateResult {
+  updated: number;
 }
 
 export interface WaehrungGroup {
@@ -127,24 +183,10 @@ export interface InvoiceStats {
 }
 
 export interface DropboxSyncResult {
-  /** Number of new files imported */
   imported: number;
-  /** Number of files already in DB (skipped) */
   skipped: number;
-  /** Number of files that failed to process */
   errors: number;
-  /** Dropbox folder that was scanned */
   folder: string;
-}
-
-export interface AppSettings {
-  /** Dropbox folder path to monitor for new PDF invoices */
-  dropboxFolder: string;
-}
-
-export interface AppSettingsUpdate {
-  /** Dropbox folder path to monitor for new PDF invoices */
-  dropboxFolder?: string;
 }
 
 export interface ErrorResponse {

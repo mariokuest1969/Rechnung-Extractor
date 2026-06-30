@@ -31,4 +31,16 @@ export interface InvoiceUpdate {
   freifeld2?: string | null;
   /** @nullable */
   freifeld3?: string | null;
+  /** @nullable */
+  lieferantId?: number | null;
+  /** @nullable */
+  buchungskonto1?: string | null;
+  /** @nullable */
+  buchungskonto1Betrag?: number | null;
+  /** @nullable */
+  buchungskonto2?: string | null;
+  /** @nullable */
+  buchungskonto2Betrag?: number | null;
+  /** @nullable */
+  buchungstext?: string | null;
 }

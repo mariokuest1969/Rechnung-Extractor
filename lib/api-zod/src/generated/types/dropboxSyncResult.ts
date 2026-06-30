@@ -7,12 +7,8 @@
  */
 
 export interface DropboxSyncResult {
-  /** Number of new files imported */
   imported: number;
-  /** Number of files already in DB (skipped) */
   skipped: number;
-  /** Number of files that failed to process */
   errors: number;
-  /** Dropbox folder that was scanned */
   folder: string;
 }

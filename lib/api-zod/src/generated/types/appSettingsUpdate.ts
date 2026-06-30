@@ -7,6 +7,5 @@
  */
 
 export interface AppSettingsUpdate {
-  /** Dropbox folder path to monitor for new PDF invoices */
   dropboxFolder?: string;
 }

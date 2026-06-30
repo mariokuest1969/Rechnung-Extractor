@@ -9,7 +9,6 @@ import * as zod from 'zod';
 
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -18,32 +17,177 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Returns all extracted invoice records
+ * @summary Get current settings
+ */
+export const GetSettingsResponse = zod.object({
+  "dropboxFolder": zod.string()
+})
+
+
+/**
+ * @summary Update settings
+ */
+export const UpdateSettingsBody = zod.object({
+  "dropboxFolder": zod.string().optional()
+})
+
+export const UpdateSettingsResponse = zod.object({
+  "dropboxFolder": zod.string()
+})
+
+
+/**
+ * @summary List all suppliers
+ */
+export const ListLieferantenResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "kuerzel": zod.string().nullish(),
+  "steuernummer": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListLieferantenResponse = zod.array(ListLieferantenResponseItem)
+
+
+/**
+ * @summary Create a supplier
+ */
+export const CreateLieferantBody = zod.object({
+  "name": zod.string(),
+  "kuerzel": zod.string().nullish(),
+  "steuernummer": zod.string().nullish()
+})
+
+export const CreateLieferantResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "kuerzel": zod.string().nullish(),
+  "steuernummer": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update a supplier
+ */
+export const UpdateLieferantParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateLieferantBody = zod.object({
+  "name": zod.string(),
+  "kuerzel": zod.string().nullish(),
+  "steuernummer": zod.string().nullish()
+})
+
+export const UpdateLieferantResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "kuerzel": zod.string().nullish(),
+  "steuernummer": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a supplier
+ */
+export const DeleteLieferantParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteLieferantResponse = zod.void()
+
+
+/**
+ * @summary List all booking accounts
+ */
+export const ListBuchungskontenResponseItem = zod.object({
+  "id": zod.number(),
+  "kontonummer": zod.string(),
+  "bezeichnung": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListBuchungskontenResponse = zod.array(ListBuchungskontenResponseItem)
+
+
+/**
+ * @summary Create a booking account
+ */
+export const CreateBuchungskontoBody = zod.object({
+  "kontonummer": zod.string(),
+  "bezeichnung": zod.string()
+})
+
+export const CreateBuchungskontoResponse = zod.object({
+  "id": zod.number(),
+  "kontonummer": zod.string(),
+  "bezeichnung": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update a booking account
+ */
+export const UpdateBuchungskontoParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateBuchungskontoBody = zod.object({
+  "kontonummer": zod.string(),
+  "bezeichnung": zod.string()
+})
+
+export const UpdateBuchungskontoResponse = zod.object({
+  "id": zod.number(),
+  "kontonummer": zod.string(),
+  "bezeichnung": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a booking account
+ */
+export const DeleteBuchungskontoParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteBuchungskontoResponse = zod.void()
+
+
+/**
  * @summary List all invoices
  */
 export const ListInvoicesResponseItem = zod.object({
   "id": zod.number(),
-  "rechnungssteller": zod.string().nullish().describe('Invoice issuer \/ Lieferant'),
-  "datum": zod.string().nullish().describe('Invoice date (ISO string)'),
-  "rechnungsnummer": zod.string().nullish().describe('Invoice number'),
-  "bruttoBetrag": zod.number().nullish().describe('Gross amount'),
-  "steuersatz": zod.number().nullish().describe('Tax rate in percent (e.g. 20 for 20%)'),
-  "steuerBetrag": zod.number().nullish().describe('Tax amount'),
-  "nettoBetrag": zod.number().nullish().describe('Net amount'),
-  "waehrung": zod.string().nullish().describe('Currency (e.g. EUR)'),
-  "bemerkung": zod.string().nullish().describe('Notes \/ remarks'),
-  "freifeld1": zod.string().nullish().describe('Custom free-text field 1'),
-  "freifeld2": zod.string().nullish().describe('Custom free-text field 2'),
-  "freifeld3": zod.string().nullish().describe('Custom free-text field 3'),
-  "dateiname": zod.string().nullish().describe('Original PDF filename'),
-  "dropboxFileId": zod.string().nullish().describe('Dropbox file ID (set when imported from Dropbox)'),
-  "createdAt": zod.string().describe('Creation timestamp')
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "dateiname": zod.string().nullish(),
+  "dropboxFileId": zod.string().nullish(),
+  "createdAt": zod.string()
 })
 export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem)
 
 
 /**
- * Returns summary statistics for all invoices
  * @summary Get invoice statistics
  */
 export const GetInvoiceStatsResponse = zod.object({
@@ -60,59 +204,68 @@ export const GetInvoiceStatsResponse = zod.object({
 
 
 /**
- * Upload one or more PDF files and extract invoice data using AI (multipart/form-data)
+ * Upload one or more PDF files and extract invoice data using AI
  * @summary Upload PDF invoices
  */
 export const UploadInvoicesResponseItem = zod.object({
   "id": zod.number(),
-  "rechnungssteller": zod.string().nullish().describe('Invoice issuer \/ Lieferant'),
-  "datum": zod.string().nullish().describe('Invoice date (ISO string)'),
-  "rechnungsnummer": zod.string().nullish().describe('Invoice number'),
-  "bruttoBetrag": zod.number().nullish().describe('Gross amount'),
-  "steuersatz": zod.number().nullish().describe('Tax rate in percent (e.g. 20 for 20%)'),
-  "steuerBetrag": zod.number().nullish().describe('Tax amount'),
-  "nettoBetrag": zod.number().nullish().describe('Net amount'),
-  "waehrung": zod.string().nullish().describe('Currency (e.g. EUR)'),
-  "bemerkung": zod.string().nullish().describe('Notes \/ remarks'),
-  "freifeld1": zod.string().nullish().describe('Custom free-text field 1'),
-  "freifeld2": zod.string().nullish().describe('Custom free-text field 2'),
-  "freifeld3": zod.string().nullish().describe('Custom free-text field 3'),
-  "dateiname": zod.string().nullish().describe('Original PDF filename'),
-  "dropboxFileId": zod.string().nullish().describe('Dropbox file ID (set when imported from Dropbox)'),
-  "createdAt": zod.string().describe('Creation timestamp')
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "dateiname": zod.string().nullish(),
+  "dropboxFileId": zod.string().nullish(),
+  "createdAt": zod.string()
 })
 export const UploadInvoicesResponse = zod.array(UploadInvoicesResponseItem)
 
 
 /**
- * @summary Get current settings
+ * @summary Bulk update multiple invoices
  */
-export const GetSettingsResponse = zod.object({
-  "dropboxFolder": zod.string().describe('Dropbox folder path to monitor for new PDF invoices')
+export const BulkUpdateInvoicesBody = zod.object({
+  "ids": zod.array(zod.number()).describe('Invoice IDs to update'),
+  "fields": zod.object({
+  "rechnungssteller": zod.string().nullish(),
+  "lieferantId": zod.number().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish()
+}).describe('Fields to set on all selected invoices')
+})
+
+export const BulkUpdateInvoicesResponse = zod.object({
+  "updated": zod.number()
 })
 
 
 /**
- * @summary Update settings
- */
-export const UpdateSettingsBody = zod.object({
-  "dropboxFolder": zod.string().optional().describe('Dropbox folder path to monitor for new PDF invoices')
-})
-
-export const UpdateSettingsResponse = zod.object({
-  "dropboxFolder": zod.string().describe('Dropbox folder path to monitor for new PDF invoices')
-})
-
-
-/**
- * Immediately scan the configured Dropbox folder for new PDFs and import them
  * @summary Trigger Dropbox sync
  */
 export const TriggerDropboxSyncResponse = zod.object({
-  "imported": zod.number().describe('Number of new files imported'),
-  "skipped": zod.number().describe('Number of files already in DB (skipped)'),
-  "errors": zod.number().describe('Number of files that failed to process'),
-  "folder": zod.string().describe('Dropbox folder that was scanned')
+  "imported": zod.number(),
+  "skipped": zod.number(),
+  "errors": zod.number(),
+  "folder": zod.string()
 })
 
 
@@ -125,21 +278,27 @@ export const GetInvoiceParams = zod.object({
 
 export const GetInvoiceResponse = zod.object({
   "id": zod.number(),
-  "rechnungssteller": zod.string().nullish().describe('Invoice issuer \/ Lieferant'),
-  "datum": zod.string().nullish().describe('Invoice date (ISO string)'),
-  "rechnungsnummer": zod.string().nullish().describe('Invoice number'),
-  "bruttoBetrag": zod.number().nullish().describe('Gross amount'),
-  "steuersatz": zod.number().nullish().describe('Tax rate in percent (e.g. 20 for 20%)'),
-  "steuerBetrag": zod.number().nullish().describe('Tax amount'),
-  "nettoBetrag": zod.number().nullish().describe('Net amount'),
-  "waehrung": zod.string().nullish().describe('Currency (e.g. EUR)'),
-  "bemerkung": zod.string().nullish().describe('Notes \/ remarks'),
-  "freifeld1": zod.string().nullish().describe('Custom free-text field 1'),
-  "freifeld2": zod.string().nullish().describe('Custom free-text field 2'),
-  "freifeld3": zod.string().nullish().describe('Custom free-text field 3'),
-  "dateiname": zod.string().nullish().describe('Original PDF filename'),
-  "dropboxFileId": zod.string().nullish().describe('Dropbox file ID (set when imported from Dropbox)'),
-  "createdAt": zod.string().describe('Creation timestamp')
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "dateiname": zod.string().nullish(),
+  "dropboxFileId": zod.string().nullish(),
+  "createdAt": zod.string()
 })
 
 
@@ -162,26 +321,38 @@ export const UpdateInvoiceBody = zod.object({
   "bemerkung": zod.string().nullish(),
   "freifeld1": zod.string().nullish(),
   "freifeld2": zod.string().nullish(),
-  "freifeld3": zod.string().nullish()
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish()
 })
 
 export const UpdateInvoiceResponse = zod.object({
   "id": zod.number(),
-  "rechnungssteller": zod.string().nullish().describe('Invoice issuer \/ Lieferant'),
-  "datum": zod.string().nullish().describe('Invoice date (ISO string)'),
-  "rechnungsnummer": zod.string().nullish().describe('Invoice number'),
-  "bruttoBetrag": zod.number().nullish().describe('Gross amount'),
-  "steuersatz": zod.number().nullish().describe('Tax rate in percent (e.g. 20 for 20%)'),
-  "steuerBetrag": zod.number().nullish().describe('Tax amount'),
-  "nettoBetrag": zod.number().nullish().describe('Net amount'),
-  "waehrung": zod.string().nullish().describe('Currency (e.g. EUR)'),
-  "bemerkung": zod.string().nullish().describe('Notes \/ remarks'),
-  "freifeld1": zod.string().nullish().describe('Custom free-text field 1'),
-  "freifeld2": zod.string().nullish().describe('Custom free-text field 2'),
-  "freifeld3": zod.string().nullish().describe('Custom free-text field 3'),
-  "dateiname": zod.string().nullish().describe('Original PDF filename'),
-  "dropboxFileId": zod.string().nullish().describe('Dropbox file ID (set when imported from Dropbox)'),
-  "createdAt": zod.string().describe('Creation timestamp')
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "dateiname": zod.string().nullish(),
+  "dropboxFileId": zod.string().nullish(),
+  "createdAt": zod.string()
 })
 
 

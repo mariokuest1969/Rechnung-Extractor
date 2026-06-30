@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -16,6 +16,12 @@ export const invoicesTable = pgTable("invoices", {
   freifeld1: text("freifeld1"),
   freifeld2: text("freifeld2"),
   freifeld3: text("freifeld3"),
+  lieferantId: integer("lieferant_id"),
+  buchungskonto1: text("buchungskonto1"),
+  buchungskonto1Betrag: numeric("buchungskonto1_betrag", { precision: 12, scale: 2 }),
+  buchungskonto2: text("buchungskonto2"),
+  buchungskonto2Betrag: numeric("buchungskonto2_betrag", { precision: 12, scale: 2 }),
+  buchungstext: text("buchungstext"),
   dateiname: text("dateiname"),
   dropboxFileId: text("dropbox_file_id").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

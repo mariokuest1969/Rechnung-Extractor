@@ -14,13 +14,16 @@ tags:
     description: Invoice management operations
   - name: settings
     description: Application settings
+  - name: lieferanten
+    description: Supplier directory
+  - name: buchungskonten
+    description: Booking accounts
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -28,58 +31,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-
-  /invoices:
-    get:
-      operationId: listInvoices
-      tags: [invoices]
-      summary: List all invoices
-      description: Returns all extracted invoice records
-      responses:
-        "200":
-          description: List of invoices
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Invoice"
-
-  /invoices/stats:
-    get:
-      operationId: getInvoiceStats
-      tags: [invoices]
-      summary: Get invoice statistics
-      description: Returns summary statistics for all invoices
-      responses:
-        "200":
-          description: Statistics
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/InvoiceStats"
-
-  /invoices/upload:
-    post:
-      operationId: uploadInvoices
-      tags: [invoices]
-      summary: Upload PDF invoices
-      description: Upload one or more PDF files and extract invoice data using AI (multipart/form-data)
-      responses:
-        "200":
-          description: Extracted invoices
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Invoice"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /settings:
     get:
@@ -117,12 +68,262 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /lieferanten:
+    get:
+      operationId: listLieferanten
+      tags: [lieferanten]
+      summary: List all suppliers
+      responses:
+        "200":
+          description: Supplier list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lieferant"
+    post:
+      operationId: createLieferant
+      tags: [lieferanten]
+      summary: Create a supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LieferantCreate"
+      responses:
+        "201":
+          description: Created supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lieferant"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /lieferanten/{id}:
+    patch:
+      operationId: updateLieferant
+      tags: [lieferanten]
+      summary: Update a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LieferantCreate"
+      responses:
+        "200":
+          description: Updated supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lieferant"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteLieferant
+      tags: [lieferanten]
+      summary: Delete a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /buchungskonten:
+    get:
+      operationId: listBuchungskonten
+      tags: [buchungskonten]
+      summary: List all booking accounts
+      responses:
+        "200":
+          description: Booking account list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Buchungskonto"
+    post:
+      operationId: createBuchungskonto
+      tags: [buchungskonten]
+      summary: Create a booking account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuchungskontoCreate"
+      responses:
+        "201":
+          description: Created booking account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Buchungskonto"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /buchungskonten/{id}:
+    patch:
+      operationId: updateBuchungskonto
+      tags: [buchungskonten]
+      summary: Update a booking account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuchungskontoCreate"
+      responses:
+        "200":
+          description: Updated booking account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Buchungskonto"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteBuchungskonto
+      tags: [buchungskonten]
+      summary: Delete a booking account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List all invoices
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+
+  /invoices/stats:
+    get:
+      operationId: getInvoiceStats
+      tags: [invoices]
+      summary: Get invoice statistics
+      responses:
+        "200":
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceStats"
+
+  /invoices/upload:
+    post:
+      operationId: uploadInvoices
+      tags: [invoices]
+      summary: Upload PDF invoices
+      description: Upload one or more PDF files and extract invoice data using AI
+      responses:
+        "200":
+          description: Extracted invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /invoices/bulk-update:
+    patch:
+      operationId: bulkUpdateInvoices
+      tags: [invoices]
+      summary: Bulk update multiple invoices
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkUpdateBody"
+      responses:
+        "200":
+          description: Updated count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkUpdateResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /invoices/dropbox-sync:
     post:
       operationId: triggerDropboxSync
       tags: [invoices]
       summary: Trigger Dropbox sync
-      description: Immediately scan the configured Dropbox folder for new PDFs and import them
       responses:
         "200":
           description: Sync result
@@ -222,6 +423,78 @@ components:
       required:
         - status
 
+    AppSettings:
+      type: object
+      required:
+        - dropboxFolder
+      properties:
+        dropboxFolder:
+          type: string
+
+    AppSettingsUpdate:
+      type: object
+      properties:
+        dropboxFolder:
+          type: string
+
+    Lieferant:
+      type: object
+      required:
+        - id
+        - name
+        - createdAt
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        kuerzel:
+          type: ["string", "null"]
+        steuernummer:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    LieferantCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        kuerzel:
+          type: ["string", "null"]
+        steuernummer:
+          type: ["string", "null"]
+
+    Buchungskonto:
+      type: object
+      required:
+        - id
+        - kontonummer
+        - bezeichnung
+        - createdAt
+      properties:
+        id:
+          type: integer
+        kontonummer:
+          type: string
+        bezeichnung:
+          type: string
+        createdAt:
+          type: string
+
+    BuchungskontoCreate:
+      type: object
+      required:
+        - kontonummer
+        - bezeichnung
+      properties:
+        kontonummer:
+          type: string
+        bezeichnung:
+          type: string
+
     Invoice:
       type: object
       required:
@@ -232,49 +505,46 @@ components:
           type: integer
         rechnungssteller:
           type: ["string", "null"]
-          description: Invoice issuer / Lieferant
         datum:
           type: ["string", "null"]
-          description: Invoice date (ISO string)
         rechnungsnummer:
           type: ["string", "null"]
-          description: Invoice number
         bruttoBetrag:
           type: ["number", "null"]
-          description: Gross amount
         steuersatz:
           type: ["number", "null"]
-          description: Tax rate in percent (e.g. 20 for 20%)
         steuerBetrag:
           type: ["number", "null"]
-          description: Tax amount
         nettoBetrag:
           type: ["number", "null"]
-          description: Net amount
         waehrung:
           type: ["string", "null"]
-          description: Currency (e.g. EUR)
         bemerkung:
           type: ["string", "null"]
-          description: Notes / remarks
         freifeld1:
           type: ["string", "null"]
-          description: Custom free-text field 1
         freifeld2:
           type: ["string", "null"]
-          description: Custom free-text field 2
         freifeld3:
           type: ["string", "null"]
-          description: Custom free-text field 3
+        lieferantId:
+          type: ["integer", "null"]
+        buchungskonto1:
+          type: ["string", "null"]
+        buchungskonto1Betrag:
+          type: ["number", "null"]
+        buchungskonto2:
+          type: ["string", "null"]
+        buchungskonto2Betrag:
+          type: ["number", "null"]
+        buchungstext:
+          type: ["string", "null"]
         dateiname:
           type: ["string", "null"]
-          description: Original PDF filename
         dropboxFileId:
           type: ["string", "null"]
-          description: Dropbox file ID (set when imported from Dropbox)
         createdAt:
           type: string
-          description: Creation timestamp
 
     InvoiceUpdate:
       type: object
@@ -303,6 +573,62 @@ components:
           type: ["string", "null"]
         freifeld3:
           type: ["string", "null"]
+        lieferantId:
+          type: ["integer", "null"]
+        buchungskonto1:
+          type: ["string", "null"]
+        buchungskonto1Betrag:
+          type: ["number", "null"]
+        buchungskonto2:
+          type: ["string", "null"]
+        buchungskonto2Betrag:
+          type: ["number", "null"]
+        buchungstext:
+          type: ["string", "null"]
+
+    BulkUpdateBody:
+      type: object
+      required:
+        - ids
+        - fields
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+          description: Invoice IDs to update
+        fields:
+          type: object
+          description: Fields to set on all selected invoices
+          properties:
+            rechnungssteller:
+              type: ["string", "null"]
+            lieferantId:
+              type: ["integer", "null"]
+            buchungskonto1:
+              type: ["string", "null"]
+            buchungskonto1Betrag:
+              type: ["number", "null"]
+            buchungskonto2:
+              type: ["string", "null"]
+            buchungskonto2Betrag:
+              type: ["number", "null"]
+            buchungstext:
+              type: ["string", "null"]
+            freifeld1:
+              type: ["string", "null"]
+            freifeld2:
+              type: ["string", "null"]
+            freifeld3:
+              type: ["string", "null"]
+
+    BulkUpdateResult:
+      type: object
+      required:
+        - updated
+      properties:
+        updated:
+          type: integer
 
     InvoiceStats:
       type: object
@@ -350,32 +676,12 @@ components:
       properties:
         imported:
           type: integer
-          description: Number of new files imported
         skipped:
           type: integer
-          description: Number of files already in DB (skipped)
         errors:
           type: integer
-          description: Number of files that failed to process
         folder:
           type: string
-          description: Dropbox folder that was scanned
-
-    AppSettings:
-      type: object
-      required:
-        - dropboxFolder
-      properties:
-        dropboxFolder:
-          type: string
-          description: Dropbox folder path to monitor for new PDF invoices
-
-    AppSettingsUpdate:
-      type: object
-      properties:
-        dropboxFolder:
-          type: string
-          description: Dropbox folder path to monitor for new PDF invoices
 
     ErrorResponse:
       type: object

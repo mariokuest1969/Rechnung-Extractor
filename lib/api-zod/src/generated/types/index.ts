@@ -8,10 +8,17 @@
 
 export * from './appSettings';
 export * from './appSettingsUpdate';
+export * from './buchungskonto';
+export * from './buchungskontoCreate';
+export * from './bulkUpdateBody';
+export * from './bulkUpdateBodyFields';
+export * from './bulkUpdateResult';
 export * from './dropboxSyncResult';
 export * from './errorResponse';
 export * from './healthStatus';
 export * from './invoice';
 export * from './invoiceStats';
 export * from './invoiceUpdate';
+export * from './lieferant';
+export * from './lieferantCreate';
 export * from './waehrungGroup';
