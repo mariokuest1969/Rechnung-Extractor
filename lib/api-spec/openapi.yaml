@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: RE2026 - Invoice extraction and management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: invoices
+    description: Invoice management operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,140 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List all invoices
+      description: Returns all extracted invoice records
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+
+  /invoices/stats:
+    get:
+      operationId: getInvoiceStats
+      tags: [invoices]
+      summary: Get invoice statistics
+      description: Returns summary statistics for all invoices
+      responses:
+        "200":
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceStats"
+
+  /invoices/upload:
+    post:
+      operationId: uploadInvoices
+      tags: [invoices]
+      summary: Upload PDF invoices
+      description: Upload one or more PDF files and extract invoice data using AI
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/InvoiceUpload"
+      responses:
+        "200":
+          description: Extracted invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get invoice by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateInvoice
+      tags: [invoices]
+      summary: Update an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceUpdate"
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      summary: Delete an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted successfully
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +170,122 @@ components:
       required:
         - status
 
+    Invoice:
+      type: object
+      required:
+        - id
+        - createdAt
+      properties:
+        id:
+          type: integer
+        rechnungssteller:
+          type: ["string", "null"]
+          description: Invoice issuer / Lieferant
+        datum:
+          type: ["string", "null"]
+          description: Invoice date (ISO string)
+        rechnungsnummer:
+          type: ["string", "null"]
+          description: Invoice number
+        bruttoBetrag:
+          type: ["number", "null"]
+          description: Gross amount
+        steuersatz:
+          type: ["number", "null"]
+          description: Tax rate in percent (e.g. 20 for 20%)
+        steuerBetrag:
+          type: ["number", "null"]
+          description: Tax amount
+        nettoBetrag:
+          type: ["number", "null"]
+          description: Net amount
+        waehrung:
+          type: ["string", "null"]
+          description: Currency (e.g. EUR)
+        bemerkung:
+          type: ["string", "null"]
+          description: Notes / remarks
+        dateiname:
+          type: ["string", "null"]
+          description: Original PDF filename
+        createdAt:
+          type: string
+          description: Creation timestamp
+
+    InvoiceUpdate:
+      type: object
+      properties:
+        rechnungssteller:
+          type: ["string", "null"]
+        datum:
+          type: ["string", "null"]
+        rechnungsnummer:
+          type: ["string", "null"]
+        bruttoBetrag:
+          type: ["number", "null"]
+        steuersatz:
+          type: ["number", "null"]
+        steuerBetrag:
+          type: ["number", "null"]
+        nettoBetrag:
+          type: ["number", "null"]
+        waehrung:
+          type: ["string", "null"]
+        bemerkung:
+          type: ["string", "null"]
+
+    InvoiceUpload:
+      type: object
+      required:
+        - files
+      properties:
+        files:
+          type: array
+          items:
+            type: string
+            format: binary
+          description: PDF files to process
+
+    InvoiceStats:
+      type: object
+      required:
+        - totalInvoices
+        - totalBrutto
+        - totalNetto
+        - totalSteuer
+        - byWaehrung
+      properties:
+        totalInvoices:
+          type: integer
+        totalBrutto:
+          type: number
+        totalNetto:
+          type: number
+        totalSteuer:
+          type: number
+        byWaehrung:
+          type: array
+          items:
+            $ref: "#/components/schemas/WaehrungGroup"
+
+    WaehrungGroup:
+      type: object
+      required:
+        - waehrung
+        - totalBrutto
+        - count
+      properties:
+        waehrung:
+          type: string
+        totalBrutto:
+          type: number
+        count:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
