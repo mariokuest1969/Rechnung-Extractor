@@ -308,20 +308,26 @@ function SortHeader({
   align,
   sortField,
   sortDir,
-  onToggle,
+  onSort,
+  className = "",
+  ...thProps
 }: {
   colId: ColId;
   label: string;
   align: "left" | "right";
   sortField: SortField | null;
   sortDir: "asc" | "desc";
-  onToggle: (id: ColId) => void;
-}) {
+  onSort: (id: ColId) => void;
+  className?: string;
+} & Omit<React.ComponentPropsWithoutRef<"th">, "className">) {
   const active = sortField === colId;
   return (
-    <th className={`px-4 py-3 font-medium whitespace-nowrap ${align === "right" ? "text-right" : ""}`}>
+    <th
+      className={`px-4 py-3 font-medium whitespace-nowrap ${align === "right" ? "text-right" : ""} ${className}`}
+      {...thProps}
+    >
       <button
-        onClick={() => onToggle(colId)}
+        onClick={() => onSort(colId)}
         className={`flex items-center gap-1 hover:text-foreground transition-colors ${align === "right" ? "ml-auto" : ""}`}
       >
         {label}
@@ -384,6 +390,29 @@ export function InvoiceTable() {
   const [filterLieferantId, setFilterLieferantId] = useState<string>("all");
   const [filterDatumVon, setFilterDatumVon] = useState("");
   const [filterDatumBis, setFilterDatumBis] = useState("");
+
+  // ── Column order (drag-to-reorder) ────────────────────────────────────────
+  const [columnOrder, setColumnOrder] = useState<ColId[]>(() => COLUMN_DEFS.map((c) => c.id));
+  const [dragCol, setDragCol] = useState<ColId | null>(null);
+  const [dragOver, setDragOver] = useState<ColId | null>(null);
+
+  const handleColDrop = (targetId: ColId) => {
+    if (!dragCol || dragCol === targetId) return;
+    setColumnOrder((prev) => {
+      const next = [...prev];
+      const from = next.indexOf(dragCol);
+      const to = next.indexOf(targetId);
+      if (from === -1 || to === -1) return prev;
+      next.splice(from, 1);
+      next.splice(to, 0, dragCol);
+      return next;
+    });
+    setDragCol(null);
+    setDragOver(null);
+  };
+
+  // ordered list of currently visible columns
+  const orderedVisibleCols = columnOrder.filter((id) => isVisible(id));
 
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -584,7 +613,7 @@ export function InvoiceTable() {
 
   const selectedIds = Array.from(selected);
 
-  const sortHeaderProps = { sortField, sortDir, onToggle: toggleSort };
+  const sortHeaderProps = { sortField, sortDir, onSort: toggleSort };
 
   return (
     <>
@@ -636,17 +665,18 @@ export function InvoiceTable() {
               </Button>
 
               {colMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg p-2 w-52">
+                <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg p-2 w-56">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2 pb-1.5 border-b border-border mb-1">
-                    Spalten anzeigen
+                    Spalten — Reihenfolge per Drag &amp; Drop im Tabellenkopf ändern
                   </p>
                   <div className="space-y-0.5 max-h-80 overflow-y-auto">
-                    {COLUMN_DEFS.map((col) => {
-                      const visible = isVisible(col.id);
+                    {columnOrder.map((colId) => {
+                      const col = COLUMN_DEFS.find((c) => c.id === colId)!;
+                      const visible = isVisible(colId);
                       return (
                         <button
-                          key={col.id}
-                          onClick={() => toggleCol(col.id)}
+                          key={colId}
+                          onClick={() => toggleCol(colId)}
                           className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted transition-colors text-left"
                         >
                           <span className={`h-4 w-4 flex items-center justify-center rounded border shrink-0 transition-colors ${visible ? "bg-primary border-primary" : "border-border"}`}>
@@ -657,16 +687,22 @@ export function InvoiceTable() {
                       );
                     })}
                   </div>
-                  {hiddenCols.size > 0 && (
-                    <div className="border-t border-border mt-1 pt-1">
+                  <div className="border-t border-border mt-1 pt-1 flex flex-col gap-0.5">
+                    {hiddenCols.size > 0 && (
                       <button
                         onClick={() => setHiddenCols(new Set())}
                         className="w-full text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors text-left"
                       >
                         Alle einblenden
                       </button>
-                    </div>
-                  )}
+                    )}
+                    <button
+                      onClick={() => setColumnOrder(COLUMN_DEFS.map((c) => c.id))}
+                      className="w-full text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors text-left"
+                    >
+                      Reihenfolge zurücksetzen
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -783,51 +819,58 @@ export function InvoiceTable() {
                   />
                 </th>
 
-                {isVisible("dateiname") && (
-                  <SortHeader colId="dateiname" label="Dateiname" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("rechnungssteller") && (
-                  <SortHeader colId="rechnungssteller" label="Rechnungssteller" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("lieferant") && (
-                  <SortHeader colId="lieferant" label="Lieferant" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("datum") && (
-                  <SortHeader colId="datum" label="Datum" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("rnr") && (
-                  <SortHeader colId="rnr" label="RNR" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("brutto") && (
-                  <SortHeader colId="brutto" label="Brutto" align="right" {...sortHeaderProps} />
-                )}
-                {isVisible("mwst") && (
-                  <SortHeader colId="mwst" label="MwSt %" align="right" {...sortHeaderProps} />
-                )}
-                {isVisible("steuer") && (
-                  <SortHeader colId="steuer" label="Steuer" align="right" {...sortHeaderProps} />
-                )}
-                {isVisible("netto") && (
-                  <SortHeader colId="netto" label="Netto" align="right" {...sortHeaderProps} />
-                )}
-                {isVisible("waehrung") && (
-                  <SortHeader colId="waehrung" label="Währung" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("buchung") && (
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Buchung</th>
-                )}
-                {isVisible("bemerkung") && (
-                  <SortHeader colId="bemerkung" label="Bemerkung" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("freifeld1") && (
-                  <SortHeader colId="freifeld1" label="Feld 1" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("freifeld2") && (
-                  <SortHeader colId="freifeld2" label="Feld 2" align="left" {...sortHeaderProps} />
-                )}
-                {isVisible("freifeld3") && (
-                  <SortHeader colId="freifeld3" label="Feld 3" align="left" {...sortHeaderProps} />
-                )}
+                {orderedVisibleCols.map((colId) => {
+                  const col = COLUMN_DEFS.find((c) => c.id === colId)!;
+                  const isDragOver = dragOver === colId;
+                  const isDragging = dragCol === colId;
+                  const dragHandlers = {
+                    draggable: true as const,
+                    onDragStart: (e: React.DragEvent) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      setDragCol(colId);
+                    },
+                    onDragOver: (e: React.DragEvent) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (dragOver !== colId) setDragOver(colId);
+                    },
+                    onDrop: (e: React.DragEvent) => {
+                      e.preventDefault();
+                      handleColDrop(colId);
+                    },
+                    onDragEnd: () => { setDragCol(null); setDragOver(null); },
+                  };
+                  const dragCls = isDragOver
+                    ? "border-l-2 border-l-primary bg-primary/5"
+                    : isDragging
+                    ? "opacity-40"
+                    : "";
+
+                  if (colId === "buchung") {
+                    return (
+                      <th
+                        key={colId}
+                        {...dragHandlers}
+                        className={`px-4 py-3 font-medium whitespace-nowrap cursor-grab select-none ${dragCls}`}
+                        title="Ziehen zum Verschieben"
+                      >
+                        Buchung
+                      </th>
+                    );
+                  }
+                  return (
+                    <SortHeader
+                      key={colId}
+                      colId={colId as SortField}
+                      label={col.label}
+                      align={col.align}
+                      {...sortHeaderProps}
+                      className={`cursor-grab select-none ${dragCls}`}
+                      title="Ziehen zum Verschieben"
+                      {...dragHandlers}
+                    />
+                  );
+                })}
 
                 <th className="px-4 py-3 font-medium text-center w-12">Aktion</th>
               </tr>
@@ -873,127 +916,126 @@ export function InvoiceTable() {
                       />
                     </td>
 
-                    {isVisible("dateiname") && (
-                      <td className="px-4 py-2 text-xs truncate max-w-[120px] text-muted-foreground" title={inv.dateiname ?? ""}>
-                        {inv.dateiname}
-                        {inv.dropboxFileId && (
-                          <button
-                            title="Mit KI neu extrahieren"
-                            onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
-                            disabled={reextractMutation.isPending}
-                            className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
-                          >
-                            <Sparkles className="inline h-3 w-3" />
-                          </button>
-                        )}
-                      </td>
-                    )}
-                    {isVisible("rechnungssteller") && (
-                      <td className="px-4 py-2 font-medium">
-                        <EditableCell value={inv.rechnungssteller} onSave={(v) => handleUpdate(inv.id, "rechnungssteller", v)} />
-                      </td>
-                    )}
-                    {isVisible("lieferant") && (
-                      <td className="px-4 py-2">
-                        {lieferantName ? (
-                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-medium">{lieferantName}</span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/40 italic">—</span>
-                        )}
-                      </td>
-                    )}
-                    {isVisible("datum") && (
-                      <td className="px-4 py-2">
-                        <EditableCell type="date" value={inv.datum} onSave={(v) => handleUpdate(inv.id, "datum", v)} className="font-mono text-xs" />
-                      </td>
-                    )}
-                    {isVisible("rnr") && (
-                      <td className="px-4 py-2">
-                        <EditableCell value={inv.rechnungsnummer} onSave={(v) => handleUpdate(inv.id, "rechnungsnummer", v)} />
-                      </td>
-                    )}
-                    {isVisible("brutto") && (
-                      <td className="px-4 py-2 text-right">
-                        <EditableCell
-                          type="number"
-                          value={inv.bruttoBetrag != null ? formatNumber(inv.bruttoBetrag) : null}
-                          onSave={(v) => handleUpdate(inv.id, "bruttoBetrag", v)}
-                          className="font-mono text-right"
-                        />
-                      </td>
-                    )}
-                    {isVisible("mwst") && (
-                      <td className="px-4 py-2 text-right">
-                        <EditableCell
-                          type="number"
-                          value={inv.steuersatz}
-                          onSave={(v) => handleUpdate(inv.id, "steuersatz", v)}
-                          className="font-mono text-right"
-                        />
-                      </td>
-                    )}
-                    {isVisible("steuer") && (
-                      <td className="px-4 py-2 text-right">
-                        <EditableCell
-                          type="number"
-                          value={inv.steuerBetrag != null ? formatNumber(inv.steuerBetrag) : null}
-                          onSave={(v) => handleUpdate(inv.id, "steuerBetrag", v)}
-                          className="font-mono text-right text-muted-foreground"
-                        />
-                      </td>
-                    )}
-                    {isVisible("netto") && (
-                      <td className="px-4 py-2 text-right">
-                        <EditableCell
-                          type="number"
-                          value={inv.nettoBetrag != null ? formatNumber(inv.nettoBetrag) : null}
-                          onSave={(v) => handleUpdate(inv.id, "nettoBetrag", v)}
-                          className="font-mono text-right"
-                        />
-                      </td>
-                    )}
-                    {isVisible("waehrung") && (
-                      <td className="px-4 py-2">
-                        <EditableCell value={inv.waehrung} onSave={(v) => handleUpdate(inv.id, "waehrung", v)} />
-                      </td>
-                    )}
-                    {isVisible("buchung") && (
-                      <td className="px-4 py-2">
-                        <button
-                          onClick={() => openSingleBuchung(inv)}
-                          className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
-                            hasBuchung
-                              ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-                              : "border-border text-muted-foreground/50 hover:border-primary/50 hover:text-primary"
-                          }`}
-                          title={hasBuchung ? `${inv.buchungskonto1 ?? ""}${inv.buchungskonto2 ? " / " + inv.buchungskonto2 : ""}` : "Buchung erfassen"}
-                        >
-                          {hasBuchung
-                            ? `${inv.buchungskonto1 ?? "?"}${inv.buchungskonto2 ? "/" + inv.buchungskonto2 : ""}`
-                            : "— buchen"}
-                        </button>
-                      </td>
-                    )}
-                    {isVisible("bemerkung") && (
-                      <td className="px-4 py-2">
-                        <EditableCell value={inv.bemerkung} onSave={(v) => handleUpdate(inv.id, "bemerkung", v)} />
-                      </td>
-                    )}
-                    {isVisible("freifeld1") && (
-                      <td className="px-4 py-2">
-                        <EditableCell value={inv.freifeld1 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld1", v)} />
-                      </td>
-                    )}
-                    {isVisible("freifeld2") && (
-                      <td className="px-4 py-2">
-                        <EditableCell value={inv.freifeld2 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld2", v)} />
-                      </td>
-                    )}
-                    {isVisible("freifeld3") && (
-                      <td className="px-4 py-2">
-                        <EditableCell value={inv.freifeld3 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld3", v)} />
-                      </td>
-                    )}
+                    {orderedVisibleCols.map((colId) => {
+                      switch (colId) {
+                        case "dateiname":
+                          return (
+                            <td key="dateiname" className="px-4 py-2 text-xs truncate max-w-[120px] text-muted-foreground" title={inv.dateiname ?? ""}>
+                              {inv.dateiname}
+                              {inv.dropboxFileId && (
+                                <button
+                                  title="Mit KI neu extrahieren"
+                                  onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
+                                  disabled={reextractMutation.isPending}
+                                  className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
+                                >
+                                  <Sparkles className="inline h-3 w-3" />
+                                </button>
+                              )}
+                            </td>
+                          );
+                        case "rechnungssteller":
+                          return (
+                            <td key="rechnungssteller" className="px-4 py-2 font-medium">
+                              <EditableCell value={inv.rechnungssteller} onSave={(v) => handleUpdate(inv.id, "rechnungssteller", v)} />
+                            </td>
+                          );
+                        case "lieferant":
+                          return (
+                            <td key="lieferant" className="px-4 py-2">
+                              {lieferantName ? (
+                                <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-medium">{lieferantName}</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground/40 italic">—</span>
+                              )}
+                            </td>
+                          );
+                        case "datum":
+                          return (
+                            <td key="datum" className="px-4 py-2">
+                              <EditableCell type="date" value={inv.datum} onSave={(v) => handleUpdate(inv.id, "datum", v)} className="font-mono text-xs" />
+                            </td>
+                          );
+                        case "rnr":
+                          return (
+                            <td key="rnr" className="px-4 py-2">
+                              <EditableCell value={inv.rechnungsnummer} onSave={(v) => handleUpdate(inv.id, "rechnungsnummer", v)} />
+                            </td>
+                          );
+                        case "brutto":
+                          return (
+                            <td key="brutto" className="px-4 py-2 text-right">
+                              <EditableCell type="number" value={inv.bruttoBetrag != null ? formatNumber(inv.bruttoBetrag) : null} onSave={(v) => handleUpdate(inv.id, "bruttoBetrag", v)} className="font-mono text-right" />
+                            </td>
+                          );
+                        case "mwst":
+                          return (
+                            <td key="mwst" className="px-4 py-2 text-right">
+                              <EditableCell type="number" value={inv.steuersatz} onSave={(v) => handleUpdate(inv.id, "steuersatz", v)} className="font-mono text-right" />
+                            </td>
+                          );
+                        case "steuer":
+                          return (
+                            <td key="steuer" className="px-4 py-2 text-right">
+                              <EditableCell type="number" value={inv.steuerBetrag != null ? formatNumber(inv.steuerBetrag) : null} onSave={(v) => handleUpdate(inv.id, "steuerBetrag", v)} className="font-mono text-right text-muted-foreground" />
+                            </td>
+                          );
+                        case "netto":
+                          return (
+                            <td key="netto" className="px-4 py-2 text-right">
+                              <EditableCell type="number" value={inv.nettoBetrag != null ? formatNumber(inv.nettoBetrag) : null} onSave={(v) => handleUpdate(inv.id, "nettoBetrag", v)} className="font-mono text-right" />
+                            </td>
+                          );
+                        case "waehrung":
+                          return (
+                            <td key="waehrung" className="px-4 py-2">
+                              <EditableCell value={inv.waehrung} onSave={(v) => handleUpdate(inv.id, "waehrung", v)} />
+                            </td>
+                          );
+                        case "buchung":
+                          return (
+                            <td key="buchung" className="px-4 py-2">
+                              <button
+                                onClick={() => openSingleBuchung(inv)}
+                                className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
+                                  hasBuchung
+                                    ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
+                                    : "border-border text-muted-foreground/50 hover:border-primary/50 hover:text-primary"
+                                }`}
+                                title={hasBuchung ? `${inv.buchungskonto1 ?? ""}${inv.buchungskonto2 ? " / " + inv.buchungskonto2 : ""}` : "Buchung erfassen"}
+                              >
+                                {hasBuchung ? `${inv.buchungskonto1 ?? "?"}${inv.buchungskonto2 ? "/" + inv.buchungskonto2 : ""}` : "— buchen"}
+                              </button>
+                            </td>
+                          );
+                        case "bemerkung":
+                          return (
+                            <td key="bemerkung" className="px-4 py-2">
+                              <EditableCell value={inv.bemerkung} onSave={(v) => handleUpdate(inv.id, "bemerkung", v)} />
+                            </td>
+                          );
+                        case "freifeld1":
+                          return (
+                            <td key="freifeld1" className="px-4 py-2">
+                              <EditableCell value={inv.freifeld1 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld1", v)} />
+                            </td>
+                          );
+                        case "freifeld2":
+                          return (
+                            <td key="freifeld2" className="px-4 py-2">
+                              <EditableCell value={inv.freifeld2 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld2", v)} />
+                            </td>
+                          );
+                        case "freifeld3":
+                          return (
+                            <td key="freifeld3" className="px-4 py-2">
+                              <EditableCell value={inv.freifeld3 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld3", v)} />
+                            </td>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
 
                     <td className="px-4 py-2 text-center">
                       <AlertDialog>
