@@ -310,6 +310,7 @@ export const BulkUpdateInvoicesBody = zod.object({
   "fields": zod.object({
   "rechnungssteller": zod.string().nullish(),
   "lieferantId": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
   "buchungskonto1": zod.string().nullish(),
   "buchungskonto1Betrag": zod.number().nullish(),
   "buchungskonto2": zod.string().nullish(),

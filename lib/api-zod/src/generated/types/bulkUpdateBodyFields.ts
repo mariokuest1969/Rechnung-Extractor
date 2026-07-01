@@ -15,6 +15,8 @@ export type BulkUpdateBodyFields = {
   /** @nullable */
   lieferantId?: number | null;
   /** @nullable */
+  steuersatz?: number | null;
+  /** @nullable */
   buchungskonto1?: string | null;
   /** @nullable */
   buchungskonto1Betrag?: number | null;

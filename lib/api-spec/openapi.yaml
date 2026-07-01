@@ -760,6 +760,8 @@ components:
               type: ["string", "null"]
             lieferantId:
               type: ["integer", "null"]
+            steuersatz:
+              type: ["number", "null"]
             buchungskonto1:
               type: ["string", "null"]
             buchungskonto1Betrag:

@@ -172,10 +172,40 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   if (f.freifeld1 !== undefined) update.freifeld1 = f.freifeld1;
   if (f.freifeld2 !== undefined) update.freifeld2 = f.freifeld2;
   if (f.freifeld3 !== undefined) update.freifeld3 = f.freifeld3;
-  if (Object.keys(update).length === 0) {
+
+  // MwSt-Satz: Steuer + Netto werden pro Rechnung aus dem jeweiligen Brutto neu berechnet
+  const hasSteuersatz = f.steuersatz !== undefined && f.steuersatz !== null;
+  const rate = hasSteuersatz ? Number(f.steuersatz) : null;
+  if (hasSteuersatz && (rate === null || isNaN(rate))) {
+    res.status(400).json({ error: "Ungültiger MwSt-Satz" }); return;
+  }
+
+  if (Object.keys(update).length === 0 && !hasSteuersatz) {
     res.status(400).json({ error: "Keine Felder zum Aktualisieren" }); return;
   }
   const numericIds = (ids as unknown[]).map(Number).filter((n) => !isNaN(n));
+
+  if (hasSteuersatz && rate !== null) {
+    // Pro Rechnung: netto = brutto / (1 + satz/100), steuer = brutto - netto
+    const rows = await db
+      .select()
+      .from(invoicesTable)
+      .where(inArray(invoicesTable.id, numericIds));
+    for (const inv of rows) {
+      const perUpdate: Record<string, unknown> = { ...update, steuersatz: String(rate) };
+      const brutto = inv.bruttoBetrag != null ? parseFloat(inv.bruttoBetrag) : null;
+      if (brutto != null && !isNaN(brutto)) {
+        const netto = rate === 0 ? brutto : brutto / (1 + rate / 100);
+        const steuer = brutto - netto;
+        perUpdate.nettoBetrag = String(Math.round(netto * 100) / 100);
+        perUpdate.steuerBetrag = String(Math.round(steuer * 100) / 100);
+      }
+      await db.update(invoicesTable).set(perUpdate).where(eq(invoicesTable.id, inv.id));
+    }
+    res.json({ updated: rows.length });
+    return;
+  }
+
   await db.update(invoicesTable).set(update).where(inArray(invoicesTable.id, numericIds));
   res.json({ updated: numericIds.length });
 });
