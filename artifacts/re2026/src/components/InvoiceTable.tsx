@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   useListInvoices,
   useUpdateInvoice,
@@ -35,6 +35,8 @@ import {
   ChevronDown,
   Search,
   ChevronsUpDown,
+  Columns,
+  Check,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -67,7 +69,52 @@ import { exportInvoicesToCSV } from "@/lib/csv";
 import { exportInvoicesToXLSX } from "@/lib/xlsx-export";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bulk-edit dialog: Rechnungssteller / Lieferant
+// Column definitions
+// ─────────────────────────────────────────────────────────────────────────────
+const COLUMN_DEFS = [
+  { id: "dateiname",        label: "Dateiname",        sortable: true,  align: "left"  },
+  { id: "rechnungssteller", label: "Rechnungssteller",  sortable: true,  align: "left"  },
+  { id: "lieferant",        label: "Lieferant",         sortable: true,  align: "left"  },
+  { id: "datum",            label: "Datum",             sortable: true,  align: "left"  },
+  { id: "rnr",              label: "RNR",               sortable: true,  align: "left"  },
+  { id: "brutto",           label: "Brutto",            sortable: true,  align: "right" },
+  { id: "mwst",             label: "MwSt %",            sortable: true,  align: "right" },
+  { id: "steuer",           label: "Steuer",            sortable: true,  align: "right" },
+  { id: "netto",            label: "Netto",             sortable: true,  align: "right" },
+  { id: "waehrung",         label: "Währung",           sortable: true,  align: "left"  },
+  { id: "buchung",          label: "Buchung",           sortable: false, align: "left"  },
+  { id: "bemerkung",        label: "Bemerkung",         sortable: true,  align: "left"  },
+  { id: "freifeld1",        label: "Feld 1",            sortable: true,  align: "left"  },
+  { id: "freifeld2",        label: "Feld 2",            sortable: true,  align: "left"  },
+  { id: "freifeld3",        label: "Feld 3",            sortable: true,  align: "left"  },
+] as const;
+
+type ColId = (typeof COLUMN_DEFS)[number]["id"];
+type SortField = ColId;
+
+function getSortValue(inv: Invoice, field: SortField, lieferantenMap: Map<number, string>): string | number {
+  switch (field) {
+    case "dateiname":        return inv.dateiname ?? "";
+    case "rechnungssteller": return inv.rechnungssteller ?? "";
+    case "lieferant":        return inv.lieferantId ? (lieferantenMap.get(inv.lieferantId) ?? "") : "";
+    case "datum":            return inv.datum ?? "";
+    case "rnr":              return inv.rechnungsnummer ?? "";
+    case "brutto":           return inv.bruttoBetrag ?? -Infinity;
+    case "mwst":             return (typeof inv.steuersatz === "number" ? inv.steuersatz : parseFloat(String(inv.steuersatz ?? "")) || -Infinity);
+    case "steuer":           return inv.steuerBetrag ?? -Infinity;
+    case "netto":            return inv.nettoBetrag ?? -Infinity;
+    case "waehrung":         return inv.waehrung ?? "";
+    case "buchung":          return inv.buchungskonto1 ?? "";
+    case "bemerkung":        return inv.bemerkung ?? "";
+    case "freifeld1":        return inv.freifeld1 ?? "";
+    case "freifeld2":        return inv.freifeld2 ?? "";
+    case "freifeld3":        return inv.freifeld3 ?? "";
+    default:                 return "";
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bulk-edit dialog
 // ─────────────────────────────────────────────────────────────────────────────
 function BulkEditDialog({
   open,
@@ -148,8 +195,7 @@ function BulkEditDialog({
                 <SelectItem value="none">— nicht ändern —</SelectItem>
                 {lieferanten.map((l) => (
                   <SelectItem key={l.id} value={String(l.id)}>
-                    {l.name}
-                    {l.kuerzel ? ` (${l.kuerzel})` : ""}
+                    {l.name}{l.kuerzel ? ` (${l.kuerzel})` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -157,15 +203,49 @@ function BulkEditDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Abbrechen
-          </Button>
-          <Button onClick={handleSave} disabled={bulkMutation.isPending}>
-            Speichern
-          </Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Abbrechen</Button>
+          <Button onClick={handleSave} disabled={bulkMutation.isPending}>Speichern</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sortable header cell
+// ─────────────────────────────────────────────────────────────────────────────
+function SortHeader({
+  colId,
+  label,
+  align,
+  sortField,
+  sortDir,
+  onToggle,
+}: {
+  colId: ColId;
+  label: string;
+  align: "left" | "right";
+  sortField: SortField | null;
+  sortDir: "asc" | "desc";
+  onToggle: (id: ColId) => void;
+}) {
+  const active = sortField === colId;
+  return (
+    <th className={`px-4 py-3 font-medium whitespace-nowrap ${align === "right" ? "text-right" : ""}`}>
+      <button
+        onClick={() => onToggle(colId)}
+        className={`flex items-center gap-1 hover:text-foreground transition-colors ${align === "right" ? "ml-auto" : ""}`}
+      >
+        {label}
+        {active ? (
+          sortDir === "asc"
+            ? <ChevronUp className="h-3 w-3" />
+            : <ChevronDown className="h-3 w-3" />
+        ) : (
+          <ChevronsUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </button>
+    </th>
   );
 }
 
@@ -183,6 +263,34 @@ export function InvoiceTable() {
     return m;
   }, [lieferanten]);
 
+  // ── Column visibility ──────────────────────────────────────────────────────
+  const [hiddenCols, setHiddenCols] = useState<Set<ColId>>(new Set());
+  const [colMenuOpen, setColMenuOpen] = useState(false);
+  const colMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!colMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) {
+        setColMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [colMenuOpen]);
+
+  const isVisible = (id: ColId) => !hiddenCols.has(id);
+
+  const toggleCol = (id: ColId) =>
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const visibleColCount = COLUMN_DEFS.filter((c) => isVisible(c.id)).length;
+  const totalCols = 3 + visibleColCount; // link + checkbox + actions
+
   // ── Filter state ──────────────────────────────────────────────────────────
   const [searchText, setSearchText] = useState("");
   const [filterLieferantId, setFilterLieferantId] = useState<string>("all");
@@ -190,7 +298,6 @@ export function InvoiceTable() {
   const [filterDatumBis, setFilterDatumBis] = useState("");
 
   // ── Sort state ────────────────────────────────────────────────────────────
-  type SortField = "lieferant" | "datum" | "rnr";
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -221,44 +328,36 @@ export function InvoiceTable() {
     if (filterDatumBis) list = list.filter((inv) => (inv.datum ?? "") <= filterDatumBis);
     if (sortField) {
       list = [...list].sort((a, b) => {
-        let va = "", vb = "";
-        if (sortField === "lieferant") {
-          va = a.lieferantId ? (lieferantenMap.get(a.lieferantId) ?? "") : "";
-          vb = b.lieferantId ? (lieferantenMap.get(b.lieferantId) ?? "") : "";
-        } else if (sortField === "datum") {
-          va = a.datum ?? ""; vb = b.datum ?? "";
-        } else if (sortField === "rnr") {
-          va = a.rechnungsnummer ?? ""; vb = b.rechnungsnummer ?? "";
+        const va = getSortValue(a, sortField, lieferantenMap);
+        const vb = getSortValue(b, sortField, lieferantenMap);
+        let cmp: number;
+        if (typeof va === "number" && typeof vb === "number") {
+          cmp = va - vb;
+        } else {
+          cmp = String(va).localeCompare(String(vb), "de");
         }
-        return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+        return sortDir === "asc" ? cmp : -cmp;
       });
     }
     return list;
   }, [invoices, searchText, filterLieferantId, filterDatumVon, filterDatumBis, sortField, sortDir, lieferantenMap]);
 
   const hasActiveFilter = searchText || filterLieferantId !== "all" || filterDatumVon || filterDatumBis;
-
   const clearFilters = () => {
     setSearchText(""); setFilterLieferantId("all"); setFilterDatumVon(""); setFilterDatumBis("");
   };
 
-  // Selection
+  // ── Selection ─────────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const allIds = useMemo(() => displayInvoices.map((i) => i.id), [displayInvoices]);
   const allChecked = allIds.length > 0 && allIds.every((id) => selected.has(id));
   const someChecked = selected.size > 0 && !allChecked;
 
   const toggle = (id: number) =>
-    setSelected((s) => {
-      const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(allIds));
 
-  const toggleAll = () =>
-    setSelected(allChecked ? new Set() : new Set(allIds));
-
-  // Dialogs
+  // ── Dialogs ───────────────────────────────────────────────────────────────
   const [lieferantenOpen, setLieferantenOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [buchungsOpen, setBuchungsOpen] = useState(false);
@@ -266,17 +365,10 @@ export function InvoiceTable() {
   const [detailInvoiceId, setDetailInvoiceId] = useState<number | null>(null);
   const detailInvoice = invoices?.find((i) => i.id === detailInvoiceId) ?? null;
 
-  const openBulkBuchung = () => {
-    setBuchungsInvoice(null);
-    setBuchungsOpen(true);
-  };
+  const openBulkBuchung = () => { setBuchungsInvoice(null); setBuchungsOpen(true); };
+  const openSingleBuchung = (inv: Invoice) => { setBuchungsInvoice(inv); setBuchungsOpen(true); };
 
-  const openSingleBuchung = (inv: Invoice) => {
-    setBuchungsInvoice(inv);
-    setBuchungsOpen(true);
-  };
-
-  // Mutations
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const updateMutation = useUpdateInvoice({
     mutation: {
       onSuccess: () => {
@@ -315,9 +407,7 @@ export function InvoiceTable() {
       onSuccess: (data) => {
         queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() });
-        toast.success(
-          `Dropbox-Sync: ${data.imported} neu importiert, ${data.skipped} bereits vorhanden`
-        );
+        toast.success(`Dropbox-Sync: ${data.imported} neu importiert, ${data.skipped} bereits vorhanden`);
       },
       onError: () => toast.error("Dropbox-Sync fehlgeschlagen"),
     },
@@ -406,47 +496,33 @@ export function InvoiceTable() {
 
   const selectedIds = Array.from(selected);
 
+  const sortHeaderProps = { sortField, sortDir, onToggle: toggleSort };
+
   return (
     <>
       <div className="bg-card rounded-lg border border-border overflow-hidden flex flex-col shadow-sm">
-        {/* Header */}
+        {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
           <h2 className="text-base font-semibold text-foreground">Erfasste Rechnungen</h2>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLieferantenOpen(true)}
-              title="Lieferantenverzeichnis"
-            >
-              <Users className="h-4 w-4 mr-1" />
-              Lieferanten
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => setLieferantenOpen(true)} title="Lieferantenverzeichnis">
+              <Users className="h-4 w-4 mr-1" /> Lieferanten
             </Button>
             <Button
-              variant="outline"
-              size="sm"
+              variant="outline" size="sm"
               onClick={() => syncMutation.mutate()}
               disabled={syncMutation.isPending || cleanupMutation.isPending}
             >
-              {syncMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-1" />
-              )}
+              {syncMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
               Dropbox jetzt prüfen
             </Button>
             <Button
-              variant="outline"
-              size="sm"
+              variant="outline" size="sm"
               onClick={() => cleanupMutation.mutate()}
               disabled={cleanupMutation.isPending || syncMutation.isPending}
               title="Einträge entfernen, deren Datei in Dropbox gelöscht wurde"
             >
-              {cleanupMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-1" />
-              )}
+              {cleanupMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
               Gelöschte bereinigen
             </Button>
             <Button variant="outline" size="sm" onClick={() => exportInvoicesToCSV(invoices)}>
@@ -455,10 +531,61 @@ export function InvoiceTable() {
             <Button variant="outline" size="sm" onClick={() => exportInvoicesToXLSX(invoices)}>
               Excel Export
             </Button>
+
+            {/* ── Column picker ─────────────────────────────────────────── */}
+            <div className="relative" ref={colMenuRef}>
+              <Button
+                variant={hiddenCols.size > 0 ? "default" : "outline"}
+                size="sm"
+                onClick={() => setColMenuOpen((o) => !o)}
+                title="Spalten ein-/ausblenden"
+              >
+                <Columns className="h-4 w-4 mr-1" />
+                Spalten
+                {hiddenCols.size > 0 && (
+                  <span className="ml-1 bg-white/20 text-xs rounded px-1">{COLUMN_DEFS.length - hiddenCols.size}/{COLUMN_DEFS.length}</span>
+                )}
+              </Button>
+
+              {colMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg p-2 w-52">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2 pb-1.5 border-b border-border mb-1">
+                    Spalten anzeigen
+                  </p>
+                  <div className="space-y-0.5 max-h-80 overflow-y-auto">
+                    {COLUMN_DEFS.map((col) => {
+                      const visible = isVisible(col.id);
+                      return (
+                        <button
+                          key={col.id}
+                          onClick={() => toggleCol(col.id)}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted transition-colors text-left"
+                        >
+                          <span className={`h-4 w-4 flex items-center justify-center rounded border shrink-0 transition-colors ${visible ? "bg-primary border-primary" : "border-border"}`}>
+                            {visible && <Check className="h-3 w-3 text-white" />}
+                          </span>
+                          {col.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {hiddenCols.size > 0 && (
+                    <div className="border-t border-border mt-1 pt-1">
+                      <button
+                        onClick={() => setHiddenCols(new Set())}
+                        className="w-full text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors text-left"
+                      >
+                        Alle einblenden
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Filter Bar */}
+        {/* ── Filter Bar ──────────────────────────────────────────────────── */}
         <div className="px-4 py-2 border-b border-border bg-muted/10 flex flex-wrap items-end gap-3">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -517,31 +644,18 @@ export function InvoiceTable() {
           )}
         </div>
 
-        {/* Bulk Action Bar */}
+        {/* ── Bulk Action Bar ──────────────────────────────────────────────── */}
         {selected.size > 0 && (
           <div className="px-4 py-2 bg-primary/5 border-b border-primary/20 flex items-center gap-3 flex-wrap">
-            <span className="text-sm font-medium text-primary">
-              {selected.size} ausgewählt
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setBulkEditOpen(true)}
-            >
-              <Users className="h-3.5 w-3.5 mr-1" />
-              Rechnungssteller / Lieferant setzen
+            <span className="text-sm font-medium text-primary">{selected.size} ausgewählt</span>
+            <Button size="sm" variant="outline" onClick={() => setBulkEditOpen(true)}>
+              <Users className="h-3.5 w-3.5 mr-1" /> Rechnungssteller / Lieferant setzen
+            </Button>
+            <Button size="sm" variant="outline" onClick={openBulkBuchung}>
+              <BookOpen className="h-3.5 w-3.5 mr-1" /> Buchen
             </Button>
             <Button
-              size="sm"
-              variant="outline"
-              onClick={openBulkBuchung}
-            >
-              <BookOpen className="h-3.5 w-3.5 mr-1" />
-              Buchen
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
+              size="sm" variant="outline"
               onClick={() => {
                 const dropboxIds = selectedIds.filter(
                   (id) => invoices?.find((i) => i.id === id)?.dropboxFileId
@@ -555,34 +669,23 @@ export function InvoiceTable() {
               }}
               disabled={reextractMutation.isPending}
             >
-              <Sparkles className="h-3.5 w-3.5 mr-1" />
-              Neu extrahieren (KI)
+              <Sparkles className="h-3.5 w-3.5 mr-1" /> Neu extrahieren (KI)
             </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => setBulkDeleteConfirmOpen(true)}
-              disabled={isBulkDeleting}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1" />
-              Löschen
+            <Button size="sm" variant="destructive" onClick={() => setBulkDeleteConfirmOpen(true)} disabled={isBulkDeleting}>
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> Löschen
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setSelected(new Set())}
-            >
-              <X className="h-3.5 w-3.5 mr-1" />
-              Auswahl aufheben
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              <X className="h-3.5 w-3.5 mr-1" /> Auswahl aufheben
             </Button>
           </div>
         )}
 
+        {/* ── Table ────────────────────────────────────────────────────────── */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground bg-muted/30 border-b border-border">
               <tr>
-                <th className="px-3 py-3 w-8 text-center" title="PDF öffnen"></th>
+                <th className="px-3 py-3 w-8 text-center"></th>
                 <th className="px-3 py-3 w-10">
                   <Checkbox
                     checked={allChecked}
@@ -591,58 +694,60 @@ export function InvoiceTable() {
                     aria-label="Alle auswählen"
                   />
                 </th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Dateiname</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Rechnungssteller</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">
-                  <button
-                    onClick={() => toggleSort("lieferant")}
-                    className="flex items-center gap-1 hover:text-foreground transition-colors"
-                  >
-                    Lieferant
-                    {sortField === "lieferant" ? (
-                      sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                    ) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
-                  </button>
-                </th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">
-                  <button
-                    onClick={() => toggleSort("datum")}
-                    className="flex items-center gap-1 hover:text-foreground transition-colors"
-                  >
-                    Datum
-                    {sortField === "datum" ? (
-                      sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                    ) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
-                  </button>
-                </th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">
-                  <button
-                    onClick={() => toggleSort("rnr")}
-                    className="flex items-center gap-1 hover:text-foreground transition-colors"
-                  >
-                    RNR
-                    {sortField === "rnr" ? (
-                      sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                    ) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
-                  </button>
-                </th>
-                <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Brutto</th>
-                <th className="px-4 py-3 font-medium text-right whitespace-nowrap">MwSt %</th>
-                <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Steuer</th>
-                <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Netto</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Währung</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Buchung</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Bemerkung</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Feld 1</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Feld 2</th>
-                <th className="px-4 py-3 font-medium whitespace-nowrap">Feld 3</th>
+
+                {isVisible("dateiname") && (
+                  <SortHeader colId="dateiname" label="Dateiname" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("rechnungssteller") && (
+                  <SortHeader colId="rechnungssteller" label="Rechnungssteller" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("lieferant") && (
+                  <SortHeader colId="lieferant" label="Lieferant" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("datum") && (
+                  <SortHeader colId="datum" label="Datum" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("rnr") && (
+                  <SortHeader colId="rnr" label="RNR" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("brutto") && (
+                  <SortHeader colId="brutto" label="Brutto" align="right" {...sortHeaderProps} />
+                )}
+                {isVisible("mwst") && (
+                  <SortHeader colId="mwst" label="MwSt %" align="right" {...sortHeaderProps} />
+                )}
+                {isVisible("steuer") && (
+                  <SortHeader colId="steuer" label="Steuer" align="right" {...sortHeaderProps} />
+                )}
+                {isVisible("netto") && (
+                  <SortHeader colId="netto" label="Netto" align="right" {...sortHeaderProps} />
+                )}
+                {isVisible("waehrung") && (
+                  <SortHeader colId="waehrung" label="Währung" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("buchung") && (
+                  <th className="px-4 py-3 font-medium whitespace-nowrap">Buchung</th>
+                )}
+                {isVisible("bemerkung") && (
+                  <SortHeader colId="bemerkung" label="Bemerkung" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("freifeld1") && (
+                  <SortHeader colId="freifeld1" label="Feld 1" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("freifeld2") && (
+                  <SortHeader colId="freifeld2" label="Feld 2" align="left" {...sortHeaderProps} />
+                )}
+                {isVisible("freifeld3") && (
+                  <SortHeader colId="freifeld3" label="Feld 3" align="left" {...sortHeaderProps} />
+                )}
+
                 <th className="px-4 py-3 font-medium text-center w-12">Aktion</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {displayInvoices.length === 0 && (
                 <tr>
-                  <td colSpan={20} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={totalCols} className="px-4 py-8 text-center text-sm text-muted-foreground">
                     Keine Rechnungen entsprechen den Filterkriterien.
                   </td>
                 </tr>
@@ -679,139 +784,134 @@ export function InvoiceTable() {
                         aria-label={`Zeile ${inv.id} auswählen`}
                       />
                     </td>
-                    <td
-                      className="px-4 py-2 text-xs truncate max-w-[120px] text-muted-foreground"
-                      title={inv.dateiname ?? ""}
-                    >
-                      {inv.dateiname}
-                      {inv.dropboxFileId && (
+
+                    {isVisible("dateiname") && (
+                      <td className="px-4 py-2 text-xs truncate max-w-[120px] text-muted-foreground" title={inv.dateiname ?? ""}>
+                        {inv.dateiname}
+                        {inv.dropboxFileId && (
+                          <button
+                            title="Mit KI neu extrahieren"
+                            onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
+                            disabled={reextractMutation.isPending}
+                            className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
+                          >
+                            <Sparkles className="inline h-3 w-3" />
+                          </button>
+                        )}
+                      </td>
+                    )}
+                    {isVisible("rechnungssteller") && (
+                      <td className="px-4 py-2 font-medium">
+                        <EditableCell value={inv.rechnungssteller} onSave={(v) => handleUpdate(inv.id, "rechnungssteller", v)} />
+                      </td>
+                    )}
+                    {isVisible("lieferant") && (
+                      <td className="px-4 py-2">
+                        {lieferantName ? (
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-medium">{lieferantName}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/40 italic">—</span>
+                        )}
+                      </td>
+                    )}
+                    {isVisible("datum") && (
+                      <td className="px-4 py-2">
+                        <EditableCell type="date" value={inv.datum} onSave={(v) => handleUpdate(inv.id, "datum", v)} className="font-mono text-xs" />
+                      </td>
+                    )}
+                    {isVisible("rnr") && (
+                      <td className="px-4 py-2">
+                        <EditableCell value={inv.rechnungsnummer} onSave={(v) => handleUpdate(inv.id, "rechnungsnummer", v)} />
+                      </td>
+                    )}
+                    {isVisible("brutto") && (
+                      <td className="px-4 py-2 text-right">
+                        <EditableCell
+                          type="number"
+                          value={inv.bruttoBetrag != null ? formatNumber(inv.bruttoBetrag) : null}
+                          onSave={(v) => handleUpdate(inv.id, "bruttoBetrag", v)}
+                          className="font-mono text-right"
+                        />
+                      </td>
+                    )}
+                    {isVisible("mwst") && (
+                      <td className="px-4 py-2 text-right">
+                        <EditableCell
+                          type="number"
+                          value={inv.steuersatz}
+                          onSave={(v) => handleUpdate(inv.id, "steuersatz", v)}
+                          className="font-mono text-right"
+                        />
+                      </td>
+                    )}
+                    {isVisible("steuer") && (
+                      <td className="px-4 py-2 text-right">
+                        <EditableCell
+                          type="number"
+                          value={inv.steuerBetrag != null ? formatNumber(inv.steuerBetrag) : null}
+                          onSave={(v) => handleUpdate(inv.id, "steuerBetrag", v)}
+                          className="font-mono text-right text-muted-foreground"
+                        />
+                      </td>
+                    )}
+                    {isVisible("netto") && (
+                      <td className="px-4 py-2 text-right">
+                        <EditableCell
+                          type="number"
+                          value={inv.nettoBetrag != null ? formatNumber(inv.nettoBetrag) : null}
+                          onSave={(v) => handleUpdate(inv.id, "nettoBetrag", v)}
+                          className="font-mono text-right"
+                        />
+                      </td>
+                    )}
+                    {isVisible("waehrung") && (
+                      <td className="px-4 py-2">
+                        <EditableCell value={inv.waehrung} onSave={(v) => handleUpdate(inv.id, "waehrung", v)} />
+                      </td>
+                    )}
+                    {isVisible("buchung") && (
+                      <td className="px-4 py-2">
                         <button
-                          title="Mit KI neu extrahieren"
-                          onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
-                          disabled={reextractMutation.isPending}
-                          className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
+                          onClick={() => openSingleBuchung(inv)}
+                          className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
+                            hasBuchung
+                              ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
+                              : "border-border text-muted-foreground/50 hover:border-primary/50 hover:text-primary"
+                          }`}
+                          title={hasBuchung ? `${inv.buchungskonto1 ?? ""}${inv.buchungskonto2 ? " / " + inv.buchungskonto2 : ""}` : "Buchung erfassen"}
                         >
-                          <Sparkles className="inline h-3 w-3" />
+                          {hasBuchung
+                            ? `${inv.buchungskonto1 ?? "?"}${inv.buchungskonto2 ? "/" + inv.buchungskonto2 : ""}`
+                            : "— buchen"}
                         </button>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 font-medium">
-                      <EditableCell
-                        value={inv.rechnungssteller}
-                        onSave={(v) => handleUpdate(inv.id, "rechnungssteller", v)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      {lieferantName ? (
-                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-medium">
-                          {lieferantName}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground/40 italic">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <EditableCell
-                        type="date"
-                        value={inv.datum}
-                        onSave={(v) => handleUpdate(inv.id, "datum", v)}
-                        className="font-mono text-xs"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <EditableCell
-                        value={inv.rechnungsnummer}
-                        onSave={(v) => handleUpdate(inv.id, "rechnungsnummer", v)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <EditableCell
-                        type="number"
-                        value={inv.bruttoBetrag != null ? formatNumber(inv.bruttoBetrag) : null}
-                        onSave={(v) => handleUpdate(inv.id, "bruttoBetrag", v)}
-                        className="font-mono text-right"
-                      />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <EditableCell
-                        type="number"
-                        value={inv.steuersatz}
-                        onSave={(v) => handleUpdate(inv.id, "steuersatz", v)}
-                        className="font-mono text-right"
-                      />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <EditableCell
-                        type="number"
-                        value={inv.steuerBetrag != null ? formatNumber(inv.steuerBetrag) : null}
-                        onSave={(v) => handleUpdate(inv.id, "steuerBetrag", v)}
-                        className="font-mono text-right text-muted-foreground"
-                      />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <EditableCell
-                        type="number"
-                        value={inv.nettoBetrag != null ? formatNumber(inv.nettoBetrag) : null}
-                        onSave={(v) => handleUpdate(inv.id, "nettoBetrag", v)}
-                        className="font-mono text-right"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <EditableCell
-                        value={inv.waehrung}
-                        onSave={(v) => handleUpdate(inv.id, "waehrung", v)}
-                      />
-                    </td>
-                    {/* Buchungskonto */}
-                    <td className="px-4 py-2">
-                      <button
-                        onClick={() => openSingleBuchung(inv)}
-                        className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
-                          hasBuchung
-                            ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-                            : "border-border text-muted-foreground/50 hover:border-primary/50 hover:text-primary"
-                        }`}
-                        title={
-                          hasBuchung
-                            ? `${inv.buchungskonto1 ?? ""}${inv.buchungskonto2 ? " / " + inv.buchungskonto2 : ""}`
-                            : "Buchung erfassen"
-                        }
-                      >
-                        {hasBuchung
-                          ? `${inv.buchungskonto1 ?? "?"}${inv.buchungskonto2 ? "/" + inv.buchungskonto2 : ""}`
-                          : "— buchen"}
-                      </button>
-                    </td>
-                    <td className="px-4 py-2">
-                      <EditableCell
-                        value={inv.bemerkung}
-                        onSave={(v) => handleUpdate(inv.id, "bemerkung", v)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <EditableCell
-                        value={inv.freifeld1 ?? null}
-                        onSave={(v) => handleUpdate(inv.id, "freifeld1", v)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <EditableCell
-                        value={inv.freifeld2 ?? null}
-                        onSave={(v) => handleUpdate(inv.id, "freifeld2", v)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <EditableCell
-                        value={inv.freifeld3 ?? null}
-                        onSave={(v) => handleUpdate(inv.id, "freifeld3", v)}
-                      />
-                    </td>
+                      </td>
+                    )}
+                    {isVisible("bemerkung") && (
+                      <td className="px-4 py-2">
+                        <EditableCell value={inv.bemerkung} onSave={(v) => handleUpdate(inv.id, "bemerkung", v)} />
+                      </td>
+                    )}
+                    {isVisible("freifeld1") && (
+                      <td className="px-4 py-2">
+                        <EditableCell value={inv.freifeld1 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld1", v)} />
+                      </td>
+                    )}
+                    {isVisible("freifeld2") && (
+                      <td className="px-4 py-2">
+                        <EditableCell value={inv.freifeld2 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld2", v)} />
+                      </td>
+                    )}
+                    {isVisible("freifeld3") && (
+                      <td className="px-4 py-2">
+                        <EditableCell value={inv.freifeld3 ?? null} onSave={(v) => handleUpdate(inv.id, "freifeld3", v)} />
+                      </td>
+                    )}
+
                     <td className="px-4 py-2 text-center">
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button
-                            variant="ghost"
-                            size="icon"
+                            variant="ghost" size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -822,8 +922,7 @@ export function InvoiceTable() {
                             <AlertDialogTitle>Rechnung löschen?</AlertDialogTitle>
                             <AlertDialogDescription>
                               Möchten Sie den Datensatz für{" "}
-                              {inv.rechnungssteller || inv.dateiname} wirklich löschen? Diese
-                              Aktion kann nicht rückgängig gemacht werden.
+                              {inv.rechnungssteller || inv.dateiname} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -852,7 +951,7 @@ export function InvoiceTable() {
           <AlertDialogHeader>
             <AlertDialogTitle>{selectedIds.length} Rechnung{selectedIds.length !== 1 ? "en" : ""} löschen?</AlertDialogTitle>
             <AlertDialogDescription>
-              Diese Aktion löscht {selectedIds.length === 1 ? "die ausgewählte Rechnung" : `alle ${selectedIds.length} ausgewählten Rechnungen`} unwiderruflich aus der Datenbank.
+              Diese Aktion löscht {selectedIds.length === 1 ? "die ausgewählte Rechnung" : `alle ${selectedIds.length} ausgewählten Rechnungen`} unwiderruflich.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -873,9 +972,10 @@ export function InvoiceTable() {
         invoice={detailInvoice}
         open={detailInvoiceId !== null}
         onOpenChange={(o) => { if (!o) setDetailInvoiceId(null); }}
+        hiddenCols={hiddenCols}
       />
 
-      {/* Dialogs */}
+      {/* Other Dialogs */}
       <LieferantenDialog open={lieferantenOpen} onOpenChange={setLieferantenOpen} />
       <BulkEditDialog
         open={bulkEditOpen}
