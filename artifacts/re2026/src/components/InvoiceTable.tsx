@@ -116,6 +116,16 @@ function getSortValue(inv: Invoice, field: SortField, lieferantenMap: Map<number
 // ─────────────────────────────────────────────────────────────────────────────
 // Bulk-edit dialog
 // ─────────────────────────────────────────────────────────────────────────────
+const MWST_PRESETS = [0, 7, 19];
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+      {children}
+    </Label>
+  );
+}
+
 function BulkEditDialog({
   open,
   onOpenChange,
@@ -129,8 +139,18 @@ function BulkEditDialog({
 }) {
   const queryClient = useQueryClient();
   const { data: lieferanten = [] } = useListLieferanten();
+
   const [rechnungssteller, setRechnungssteller] = useState("");
   const [lieferantId, setLieferantId] = useState<string>("");
+  const [steuersatz, setSteuersatz] = useState<string>("");
+  const [freifeld1, setFreifeld1] = useState("");
+  const [freifeld2, setFreifeld2] = useState("");
+  const [freifeld3, setFreifeld3] = useState("");
+
+  const resetAll = () => {
+    setRechnungssteller(""); setLieferantId(""); setSteuersatz("");
+    setFreifeld1(""); setFreifeld2(""); setFreifeld3("");
+  };
 
   const bulkMutation = useBulkUpdateInvoices({
     mutation: {
@@ -140,7 +160,7 @@ function BulkEditDialog({
         queryClient.invalidateQueries({ queryKey: getListLieferantenQueryKey() });
         onOpenChange(false);
         onDone();
-        toast.success(`${selectedIds.length} Rechnungen aktualisiert`);
+        toast.success(`${selectedIds.length} Rechnung${selectedIds.length !== 1 ? "en" : ""} aktualisiert`);
       },
       onError: () => toast.error("Fehler beim Aktualisieren"),
     },
@@ -149,8 +169,15 @@ function BulkEditDialog({
   const handleSave = () => {
     const fields: Record<string, string | number | null> = {};
     if (rechnungssteller.trim()) fields.rechnungssteller = rechnungssteller.trim();
-    if (lieferantId && lieferantId !== "none")
-      fields.lieferantId = parseInt(lieferantId, 10);
+    if (lieferantId && lieferantId !== "none") fields.lieferantId = parseInt(lieferantId, 10);
+    if (steuersatz.trim()) {
+      const n = parseFloat(steuersatz.replace(",", "."));
+      if (!isNaN(n)) fields.steuersatz = n;
+    }
+    if (freifeld1.trim()) fields.freifeld1 = freifeld1.trim();
+    if (freifeld2.trim()) fields.freifeld2 = freifeld2.trim();
+    if (freifeld3.trim()) fields.freifeld3 = freifeld3.trim();
+
     if (Object.keys(fields).length === 0) {
       toast.error("Bitte mindestens ein Feld ausfüllen");
       return;
@@ -159,37 +186,35 @@ function BulkEditDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) { setRechnungssteller(""); setLieferantId(""); }
-        onOpenChange(o);
-      }}
-    >
-      <DialogContent className="max-w-sm">
+    <Dialog open={open} onOpenChange={(o) => { if (!o) resetAll(); onOpenChange(o); }}>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
             {selectedIds.length} Zeile{selectedIds.length !== 1 ? "n" : ""} bearbeiten
           </DialogTitle>
         </DialogHeader>
+
+        <p className="text-xs text-muted-foreground -mt-1">
+          Nur ausgefüllte Felder werden übernommen — leere Felder bleiben unverändert.
+        </p>
+
         <div className="space-y-4">
+          {/* Rechnungssteller */}
           <div>
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Rechnungssteller setzen
-            </Label>
+            <FieldLabel>Rechnungssteller</FieldLabel>
             <Input
               placeholder="Neuer Wert (leer = nicht ändern)"
               value={rechnungssteller}
               onChange={(e) => setRechnungssteller(e.target.value)}
             />
           </div>
+
+          {/* Lieferant */}
           <div>
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Lieferant zuweisen
-            </Label>
+            <FieldLabel>Lieferant</FieldLabel>
             <Select value={lieferantId} onValueChange={setLieferantId}>
               <SelectTrigger>
-                <SelectValue placeholder="Nicht ändern" />
+                <SelectValue placeholder="— nicht ändern —" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">— nicht ändern —</SelectItem>
@@ -201,10 +226,73 @@ function BulkEditDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* MwSt % */}
+          <div>
+            <FieldLabel>MwSt %</FieldLabel>
+            <div className="flex gap-1.5 items-center">
+              {MWST_PRESETS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setSteuersatz(String(r))}
+                  className={`px-2.5 py-1.5 text-xs rounded border transition-colors ${
+                    steuersatz === String(r)
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border bg-background hover:bg-muted text-foreground"
+                  }`}
+                >
+                  {r} %
+                </button>
+              ))}
+              <Input
+                className="flex-1 h-8 text-sm"
+                placeholder="oder freier Wert"
+                value={steuersatz}
+                onChange={(e) => setSteuersatz(e.target.value)}
+                inputMode="decimal"
+              />
+            </div>
+          </div>
+
+          {/* Freifelder */}
+          <div className="border-t border-border pt-3 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Freifelder</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <FieldLabel>Feld 1</FieldLabel>
+                <Input
+                  placeholder="leer = kein Ändern"
+                  value={freifeld1}
+                  onChange={(e) => setFreifeld1(e.target.value)}
+                />
+              </div>
+              <div>
+                <FieldLabel>Feld 2</FieldLabel>
+                <Input
+                  placeholder="leer = kein Ändern"
+                  value={freifeld2}
+                  onChange={(e) => setFreifeld2(e.target.value)}
+                />
+              </div>
+              <div>
+                <FieldLabel>Feld 3</FieldLabel>
+                <Input
+                  placeholder="leer = kein Ändern"
+                  value={freifeld3}
+                  onChange={(e) => setFreifeld3(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
         </div>
+
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Abbrechen</Button>
-          <Button onClick={handleSave} disabled={bulkMutation.isPending}>Speichern</Button>
+          <Button onClick={handleSave} disabled={bulkMutation.isPending}>
+            {bulkMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            Speichern
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
