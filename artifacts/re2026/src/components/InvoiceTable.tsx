@@ -94,6 +94,58 @@ const COLUMN_DEFS = [
 type ColId = (typeof COLUMN_DEFS)[number]["id"];
 type SortField = ColId;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Persistente Ansichtseinstellungen (localStorage)
+// ─────────────────────────────────────────────────────────────────────────────
+const VALID_COL_IDS = COLUMN_DEFS.map((c) => c.id) as readonly ColId[];
+const isColId = (v: unknown): v is ColId => VALID_COL_IDS.includes(v as ColId);
+
+const LS_KEYS = {
+  hiddenCols: "re2026.view.hiddenCols",
+  columnOrder: "re2026.view.columnOrder",
+  sort: "re2026.view.sort",
+} as const;
+
+function lsRead<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function lsWrite(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* Speicher nicht verfügbar — ignorieren */
+  }
+}
+
+function loadHiddenCols(): Set<ColId> {
+  const arr = lsRead<unknown[]>(LS_KEYS.hiddenCols);
+  return new Set(Array.isArray(arr) ? arr.filter(isColId) : []);
+}
+
+// Gespeicherte Reihenfolge mit dem aktuellen Spaltensatz abgleichen:
+// ungültige IDs verwerfen, fehlende (neue) Spalten hinten anhängen.
+function loadColumnOrder(): ColId[] {
+  const stored = lsRead<unknown[]>(LS_KEYS.columnOrder);
+  const valid = Array.isArray(stored) ? stored.filter(isColId) : [];
+  const seen = new Set(valid);
+  const missing = VALID_COL_IDS.filter((id) => !seen.has(id));
+  const result = [...valid, ...missing];
+  return result.length === VALID_COL_IDS.length ? result : [...VALID_COL_IDS];
+}
+
+function loadSort(): { field: SortField | null; dir: "asc" | "desc" } {
+  const s = lsRead<{ field: unknown; dir: unknown }>(LS_KEYS.sort);
+  const field = s && isColId(s.field) ? s.field : null;
+  const dir = s && (s.dir === "asc" || s.dir === "desc") ? s.dir : "asc";
+  return { field, dir };
+}
+
 function getSortValue(inv: Invoice, field: SortField, lieferantenMap: Map<number, string>): string | number {
   switch (field) {
     case "dateiname":        return inv.dateiname ?? "";
@@ -360,9 +412,13 @@ export function InvoiceTable() {
   }, [lieferanten]);
 
   // ── Column visibility ──────────────────────────────────────────────────────
-  const [hiddenCols, setHiddenCols] = useState<Set<ColId>>(new Set());
+  const [hiddenCols, setHiddenCols] = useState<Set<ColId>>(loadHiddenCols);
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const colMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    lsWrite(LS_KEYS.hiddenCols, [...hiddenCols]);
+  }, [hiddenCols]);
 
   useEffect(() => {
     if (!colMenuOpen) return;
@@ -394,9 +450,13 @@ export function InvoiceTable() {
   const [filterDatumBis, setFilterDatumBis] = useState("");
 
   // ── Column order (drag-to-reorder) ────────────────────────────────────────
-  const [columnOrder, setColumnOrder] = useState<ColId[]>(() => COLUMN_DEFS.map((c) => c.id));
+  const [columnOrder, setColumnOrder] = useState<ColId[]>(loadColumnOrder);
   const [dragCol, setDragCol] = useState<ColId | null>(null);
   const [dragOver, setDragOver] = useState<ColId | null>(null);
+
+  useEffect(() => {
+    lsWrite(LS_KEYS.columnOrder, columnOrder);
+  }, [columnOrder]);
 
   // ── Temporär ausgeblendete Zeilen (nur clientseitig, nicht gelöscht) ───────
   const [hiddenRows, setHiddenRows] = useState<Set<number>>(new Set());
@@ -420,8 +480,12 @@ export function InvoiceTable() {
   const orderedVisibleCols = columnOrder.filter((id) => isVisible(id));
 
   // ── Sort state ────────────────────────────────────────────────────────────
-  const [sortField, setSortField] = useState<SortField | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortField, setSortField] = useState<SortField | null>(() => loadSort().field);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => loadSort().dir);
+
+  useEffect(() => {
+    lsWrite(LS_KEYS.sort, { field: sortField, dir: sortDir });
+  }, [sortField, sortDir]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
