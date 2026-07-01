@@ -21,7 +21,8 @@ export const HealthCheckResponse = zod.object({
  * @summary Get current settings
  */
 export const GetSettingsResponse = zod.object({
-  "dropboxFolder": zod.string()
+  "dropboxFolder": zod.string(),
+  "dropboxTokenConfigured": zod.boolean().optional()
 })
 
 
@@ -29,11 +30,13 @@ export const GetSettingsResponse = zod.object({
  * @summary Update settings
  */
 export const UpdateSettingsBody = zod.object({
-  "dropboxFolder": zod.string().optional()
+  "dropboxFolder": zod.string().optional(),
+  "dropboxToken": zod.string().nullish()
 })
 
 export const UpdateSettingsResponse = zod.object({
-  "dropboxFolder": zod.string()
+  "dropboxFolder": zod.string(),
+  "dropboxTokenConfigured": zod.boolean().optional()
 })
 
 
@@ -331,6 +334,15 @@ export const TriggerDropboxSyncResponse = zod.object({
   "skipped": zod.number(),
   "errors": zod.number(),
   "folder": zod.string()
+})
+
+
+/**
+ * @summary Remove DB records for files deleted in Dropbox
+ */
+export const TriggerDropboxCleanupResponse = zod.object({
+  "removed": zod.number(),
+  "checked": zod.number()
 })
 
 

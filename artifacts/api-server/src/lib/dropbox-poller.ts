@@ -1,10 +1,10 @@
-// Dropbox integration via Replit Connectors SDK
+// Dropbox integration via Replit Connectors SDK (or direct token if configured)
 // Polls the configured Dropbox folder (stored in DB settings) for new PDF files
 // and automatically imports them.
 import { ReplitConnectors } from "@replit/connectors-sdk";
-import { eq } from "drizzle-orm";
+import { eq, isNotNull, inArray } from "drizzle-orm";
 import { db, invoicesTable } from "@workspace/db";
-import { getDropboxFolder } from "../routes/settings";
+import { getDropboxFolder, getDropboxToken } from "../routes/settings";
 import { extractInvoiceFromPDF } from "./pdf-extractor";
 import { logger } from "./logger";
 
@@ -24,13 +24,41 @@ interface ListFolderResult {
   cursor: string;
 }
 
-async function listDropboxPDFs(folder: string): Promise<DropboxEntry[]> {
+// ── Low-level Dropbox API call ────────────────────────────────────────────────
+// Uses a direct bearer token if provided, otherwise falls back to Replit connector.
+async function dropboxPost(
+  endpoint: string,
+  body: unknown,
+  token: string | null
+): Promise<Response> {
+  if (token) {
+    return fetch(`https://api.dropboxapi.com${endpoint}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
   const connectors = new ReplitConnectors();
-  const response = await connectors.proxy("dropbox", "/2/files/list_folder", {
+  return connectors.proxy("dropbox", endpoint, {
     method: "POST",
-    body: JSON.stringify({ path: folder, recursive: false }),
+    body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
   });
+}
+
+// ── List PDFs in a Dropbox folder ─────────────────────────────────────────────
+async function listDropboxPDFs(
+  folder: string,
+  token: string | null
+): Promise<DropboxEntry[]> {
+  const response = await dropboxPost(
+    "/2/files/list_folder",
+    { path: folder, recursive: false },
+    token
+  );
 
   if (!response.ok) {
     const text = await response.text();
@@ -43,9 +71,30 @@ async function listDropboxPDFs(folder: string): Promise<DropboxEntry[]> {
   );
 }
 
-export async function downloadDropboxFile(pathDisplay: string): Promise<Buffer> {
-  // Use get_temporary_link with the full path_display string.
-  // id:-based addressing fails for files in shared folder namespaces.
+// ── Download a Dropbox file by path ──────────────────────────────────────────
+export async function downloadDropboxFile(
+  pathDisplay: string,
+  token?: string | null
+): Promise<Buffer> {
+  const resolvedToken = token !== undefined ? token : await getDropboxToken();
+
+  if (resolvedToken) {
+    // Direct download via content API
+    const res = await fetch("https://content.dropboxapi.com/2/files/download", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resolvedToken}`,
+        "Dropbox-API-Arg": JSON.stringify({ path: pathDisplay }),
+      },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Dropbox download ${res.status}: ${text}`);
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  // Fallback: Replit connector via temporary link
   const connectors = new ReplitConnectors();
   const linkResponse = await connectors.proxy(
     "dropbox",
@@ -59,26 +108,20 @@ export async function downloadDropboxFile(pathDisplay: string): Promise<Buffer> 
 
   if (!linkResponse.ok) {
     const text = await linkResponse.text();
-    throw new Error(
-      `Dropbox get_temporary_link ${linkResponse.status}: ${text}`
-    );
+    throw new Error(`Dropbox get_temporary_link ${linkResponse.status}: ${text}`);
   }
 
-  const { link } = (await linkResponse.json()) as {
-    link: string;
-    metadata: unknown;
-  };
+  const { link } = (await linkResponse.json()) as { link: string; metadata: unknown };
   if (!link) throw new Error("No link returned from get_temporary_link");
 
   const fileResponse = await fetch(link);
   if (!fileResponse.ok) {
     throw new Error(`Temporary link download ${fileResponse.status}`);
   }
-
-  const arrayBuffer = await fileResponse.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return Buffer.from(await fileResponse.arrayBuffer());
 }
 
+// ── Sync result types ─────────────────────────────────────────────────────────
 export interface SyncResult {
   imported: number;
   skipped: number;
@@ -86,14 +129,20 @@ export interface SyncResult {
   folder: string;
 }
 
+export interface CleanupResult {
+  removed: number;
+  checked: number;
+}
+
+// ── Full sync: import new PDFs from Dropbox ───────────────────────────────────
 export async function syncDropbox(): Promise<SyncResult> {
-  // Read folder from DB each run so live changes take effect immediately
   const folder = await getDropboxFolder();
+  const token  = await getDropboxToken();
   const result: SyncResult = { imported: 0, skipped: 0, errors: 0, folder };
 
   let files: DropboxEntry[];
   try {
-    files = await listDropboxPDFs(folder);
+    files = await listDropboxPDFs(folder, token);
   } catch (err) {
     logger.error({ err }, "Dropbox list_folder failed");
     throw err;
@@ -102,7 +151,6 @@ export async function syncDropbox(): Promise<SyncResult> {
   logger.info({ count: files.length, folder }, "Dropbox: found PDF files");
 
   for (const file of files) {
-    // Skip if already imported (track by Dropbox file ID to survive renames)
     const existing = await db
       .select({ id: invoicesTable.id })
       .from(invoicesTable)
@@ -115,25 +163,21 @@ export async function syncDropbox(): Promise<SyncResult> {
     }
 
     try {
-      const buffer = await downloadDropboxFile(file.path_display);
+      const buffer    = await downloadDropboxFile(file.path_display, token);
       const extracted = await extractInvoiceFromPDF(buffer, file.name);
 
       await db.insert(invoicesTable).values({
         rechnungssteller: extracted.rechnungssteller,
-        datum: extracted.datum,
-        rechnungsnummer: extracted.rechnungsnummer,
-        bruttoBetrag:
-          extracted.bruttoBetrag != null ? String(extracted.bruttoBetrag) : null,
-        steuersatz:
-          extracted.steuersatz != null ? String(extracted.steuersatz) : null,
-        steuerBetrag:
-          extracted.steuerBetrag != null ? String(extracted.steuerBetrag) : null,
-        nettoBetrag:
-          extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : null,
-        waehrung: extracted.waehrung ?? "EUR",
-        bemerkung: extracted.bemerkung,
-        dateiname: file.name,
-        dropboxFileId: file.id,
+        datum:            extracted.datum,
+        rechnungsnummer:  extracted.rechnungsnummer,
+        bruttoBetrag:     extracted.bruttoBetrag  != null ? String(extracted.bruttoBetrag)  : null,
+        steuersatz:       extracted.steuersatz    != null ? String(extracted.steuersatz)    : null,
+        steuerBetrag:     extracted.steuerBetrag  != null ? String(extracted.steuerBetrag)  : null,
+        nettoBetrag:      extracted.nettoBetrag   != null ? String(extracted.nettoBetrag)   : null,
+        waehrung:         extracted.waehrung ?? "EUR",
+        bemerkung:        extracted.bemerkung,
+        dateiname:        file.name,
+        dropboxFileId:    file.id,
       });
 
       result.imported++;
@@ -148,13 +192,40 @@ export async function syncDropbox(): Promise<SyncResult> {
   return result;
 }
 
+// ── Cleanup: remove DB records for files deleted from Dropbox ─────────────────
+export async function cleanupDropbox(): Promise<CleanupResult> {
+  const folder = await getDropboxFolder();
+  const token  = await getDropboxToken();
+
+  // Get current files in Dropbox
+  const currentFiles = await listDropboxPDFs(folder, token);
+  const currentIds   = new Set(currentFiles.map((f) => f.id));
+
+  // Get all DB records that came from Dropbox
+  const dbRecords = await db
+    .select({ id: invoicesTable.id, dropboxFileId: invoicesTable.dropboxFileId })
+    .from(invoicesTable)
+    .where(isNotNull(invoicesTable.dropboxFileId));
+
+  const orphaned = dbRecords.filter(
+    (r) => r.dropboxFileId && !currentIds.has(r.dropboxFileId)
+  );
+
+  if (orphaned.length > 0) {
+    const orphanedIds = orphaned.map((r) => r.id);
+    await db.delete(invoicesTable).where(inArray(invoicesTable.id, orphanedIds));
+    logger.info({ removed: orphaned.length }, "Dropbox cleanup: removed orphaned records");
+  }
+
+  return { removed: orphaned.length, checked: dbRecords.length };
+}
+
+// ── Auto-poller ───────────────────────────────────────────────────────────────
 export function startDropboxPoller(): void {
-  // Initial sync on startup
   syncDropbox().catch((err) =>
     logger.error({ err }, "Dropbox: initial sync failed")
   );
 
-  // Poll every 5 minutes
   setInterval(() => {
     syncDropbox().catch((err) =>
       logger.error({ err }, "Dropbox: scheduled sync failed")

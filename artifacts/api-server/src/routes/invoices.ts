@@ -10,7 +10,7 @@ import {
   GetInvoiceStatsResponse,
 } from "@workspace/api-zod";
 import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
-import { syncDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
+import { syncDropbox, cleanupDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -272,6 +272,17 @@ router.post("/invoices/dropbox-sync", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Dropbox sync failed");
     res.status(500).json({ error: "Dropbox-Sync fehlgeschlagen" });
+  }
+});
+
+// POST /invoices/dropbox-cleanup — remove DB records for files deleted in Dropbox
+router.post("/invoices/dropbox-cleanup", async (req, res): Promise<void> => {
+  try {
+    const result = await cleanupDropbox();
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Dropbox cleanup failed");
+    res.status(500).json({ error: "Dropbox-Bereinigung fehlgeschlagen" });
   }
 });
 

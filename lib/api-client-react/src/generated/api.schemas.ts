@@ -12,10 +12,18 @@ export interface HealthStatus {
 
 export interface AppSettings {
   dropboxFolder: string;
+  dropboxTokenConfigured?: boolean;
 }
 
 export interface AppSettingsUpdate {
   dropboxFolder?: string;
+  /** @nullable */
+  dropboxToken?: string | null;
+}
+
+export interface DropboxCleanupResult {
+  removed: number;
+  checked: number;
 }
 
 export interface Lieferant {

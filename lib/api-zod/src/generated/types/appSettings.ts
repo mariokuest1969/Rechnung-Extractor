@@ -8,4 +8,5 @@
 
 export interface AppSettings {
   dropboxFolder: string;
+  dropboxTokenConfigured?: boolean;
 }

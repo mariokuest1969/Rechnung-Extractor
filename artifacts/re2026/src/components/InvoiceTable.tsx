@@ -4,6 +4,7 @@ import {
   useUpdateInvoice,
   useDeleteInvoice,
   useTriggerDropboxSync,
+  useTriggerDropboxCleanup,
   useBulkUpdateInvoices,
   useReextractInvoice,
   useListLieferanten,
@@ -322,6 +323,21 @@ export function InvoiceTable() {
     },
   });
 
+  const cleanupMutation = useTriggerDropboxCleanup({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() });
+        if (data.removed === 0) {
+          toast.success(`Bereinigung: Keine gelöschten Dateien gefunden (${data.checked} geprüft)`);
+        } else {
+          toast.success(`Bereinigung: ${data.removed} Einträge entfernt (${data.checked} geprüft)`);
+        }
+      },
+      onError: () => toast.error("Dropbox-Bereinigung fehlgeschlagen"),
+    },
+  });
+
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
@@ -410,7 +426,7 @@ export function InvoiceTable() {
               variant="outline"
               size="sm"
               onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
+              disabled={syncMutation.isPending || cleanupMutation.isPending}
             >
               {syncMutation.isPending ? (
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -418,6 +434,20 @@ export function InvoiceTable() {
                 <RefreshCw className="h-4 w-4 mr-1" />
               )}
               Dropbox jetzt prüfen
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cleanupMutation.mutate()}
+              disabled={cleanupMutation.isPending || syncMutation.isPending}
+              title="Einträge entfernen, deren Datei in Dropbox gelöscht wurde"
+            >
+              {cleanupMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-1" />
+              )}
+              Gelöschte bereinigen
             </Button>
             <Button variant="outline" size="sm" onClick={() => exportInvoicesToCSV(invoices)}>
               CSV Export

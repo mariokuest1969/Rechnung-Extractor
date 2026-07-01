@@ -8,4 +8,6 @@
 
 export interface AppSettingsUpdate {
   dropboxFolder?: string;
+  /** @nullable */
+  dropboxToken?: string | null;
 }

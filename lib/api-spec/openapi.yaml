@@ -422,6 +422,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /invoices/dropbox-cleanup:
+    post:
+      operationId: triggerDropboxCleanup
+      tags: [invoices]
+      summary: Remove DB records for files deleted in Dropbox
+      responses:
+        "200":
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DropboxCleanupResult"
+        "500":
+          description: Cleanup error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /invoices/{id}:
     get:
       operationId: getInvoice
@@ -517,12 +536,27 @@ components:
       properties:
         dropboxFolder:
           type: string
+        dropboxTokenConfigured:
+          type: boolean
 
     AppSettingsUpdate:
       type: object
       properties:
         dropboxFolder:
           type: string
+        dropboxToken:
+          type: ["string", "null"]
+
+    DropboxCleanupResult:
+      type: object
+      required:
+        - removed
+        - checked
+      properties:
+        removed:
+          type: integer
+        checked:
+          type: integer
 
     Lieferant:
       type: object

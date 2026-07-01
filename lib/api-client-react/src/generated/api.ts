@@ -26,6 +26,7 @@ import type {
   BuchungskontoCreate,
   BulkUpdateBody,
   BulkUpdateResult,
+  DropboxCleanupResult,
   DropboxLinkResponse,
   DropboxSyncResult,
   ErrorResponse,
@@ -1446,6 +1447,76 @@ export const useTriggerDropboxSync = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getTriggerDropboxSyncMutationOptions(options));
+    }
+
+export const getTriggerDropboxCleanupUrl = () => {
+
+
+
+
+  return `/api/invoices/dropbox-cleanup`
+}
+
+/**
+ * @summary Remove DB records for files deleted in Dropbox
+ */
+export const triggerDropboxCleanup = async ( options?: RequestInit): Promise<DropboxCleanupResult> => {
+
+  return customFetch<DropboxCleanupResult>(getTriggerDropboxCleanupUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTriggerDropboxCleanupMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof triggerDropboxCleanup>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof triggerDropboxCleanup>>, TError,void, TContext> => {
+
+const mutationKey = ['triggerDropboxCleanup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof triggerDropboxCleanup>>, void> = () => {
+
+
+          return  triggerDropboxCleanup(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TriggerDropboxCleanupMutationResult = NonNullable<Awaited<ReturnType<typeof triggerDropboxCleanup>>>
+
+    export type TriggerDropboxCleanupMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Remove DB records for files deleted in Dropbox
+ */
+export const useTriggerDropboxCleanup = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof triggerDropboxCleanup>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof triggerDropboxCleanup>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTriggerDropboxCleanupMutationOptions(options));
     }
 
 export const getGetInvoiceUrl = (id: number,) => {
