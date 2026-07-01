@@ -1,13 +1,18 @@
+import { useClerk, useUser } from "@clerk/react";
 import { StatsBar } from "@/components/StatsBar";
 import { UploadZone } from "@/components/UploadZone";
 import { InvoiceTable } from "@/components/InvoiceTable";
 import { NoticeBanner } from "@/components/NoticeBanner";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
-import { Download } from "lucide-react";
+import { Download, LogOut } from "lucide-react";
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function Home() {
   const { canInstall, install } = usePWAInstall();
+  const { signOut } = useClerk();
+  const { user } = useUser();
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-background">
@@ -32,7 +37,20 @@ export default function Home() {
               App installieren
             </button>
           )}
+          {user && (
+            <span className="text-xs text-muted-foreground hidden sm:block">
+              {user.primaryEmailAddress?.emailAddress}
+            </span>
+          )}
           <SettingsDialog />
+          <button
+            onClick={() => signOut({ redirectUrl: basePath || "/" })}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            title="Abmelden"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Abmelden</span>
+          </button>
         </div>
       </header>
 
