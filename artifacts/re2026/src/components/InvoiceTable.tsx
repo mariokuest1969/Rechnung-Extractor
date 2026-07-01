@@ -37,6 +37,8 @@ import {
   ChevronsUpDown,
   Columns,
   Check,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -396,6 +398,9 @@ export function InvoiceTable() {
   const [dragCol, setDragCol] = useState<ColId | null>(null);
   const [dragOver, setDragOver] = useState<ColId | null>(null);
 
+  // ── Temporär ausgeblendete Zeilen (nur clientseitig, nicht gelöscht) ───────
+  const [hiddenRows, setHiddenRows] = useState<Set<number>>(new Set());
+
   const handleColDrop = (targetId: ColId) => {
     if (!dragCol || dragCol === targetId) return;
     setColumnOrder((prev) => {
@@ -443,6 +448,7 @@ export function InvoiceTable() {
     }
     if (filterDatumVon) list = list.filter((inv) => (inv.datum ?? "") >= filterDatumVon);
     if (filterDatumBis) list = list.filter((inv) => (inv.datum ?? "") <= filterDatumBis);
+    if (hiddenRows.size > 0) list = list.filter((inv) => !hiddenRows.has(inv.id));
     if (sortField) {
       list = [...list].sort((a, b) => {
         const va = getSortValue(a, sortField, lieferantenMap);
@@ -457,7 +463,7 @@ export function InvoiceTable() {
       });
     }
     return list;
-  }, [invoices, searchText, filterLieferantId, filterDatumVon, filterDatumBis, sortField, sortDir, lieferantenMap]);
+  }, [invoices, searchText, filterLieferantId, filterDatumVon, filterDatumBis, hiddenRows, sortField, sortDir, lieferantenMap]);
 
   const hasActiveFilter = searchText || filterLieferantId !== "all" || filterDatumVon || filterDatumBis;
   const clearFilters = () => {
@@ -795,11 +801,39 @@ export function InvoiceTable() {
             >
               <Sparkles className="h-3.5 w-3.5 mr-1" /> Neu extrahieren (KI)
             </Button>
+            <Button
+              size="sm" variant="outline"
+              onClick={() => {
+                const count = selected.size;
+                setHiddenRows((prev) => {
+                  const next = new Set(prev);
+                  selected.forEach((id) => next.add(id));
+                  return next;
+                });
+                setSelected(new Set());
+                toast.success(`${count} Zeile${count !== 1 ? "n" : ""} ausgeblendet`);
+              }}
+            >
+              <EyeOff className="h-3.5 w-3.5 mr-1" /> Ausblenden
+            </Button>
             <Button size="sm" variant="destructive" onClick={() => setBulkDeleteConfirmOpen(true)} disabled={isBulkDeleting}>
               <Trash2 className="h-3.5 w-3.5 mr-1" /> Löschen
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               <X className="h-3.5 w-3.5 mr-1" /> Auswahl aufheben
+            </Button>
+          </div>
+        )}
+
+        {/* ── Hidden Rows Bar ──────────────────────────────────────────────── */}
+        {hiddenRows.size > 0 && (
+          <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-3 flex-wrap">
+            <EyeOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="text-sm text-amber-700 dark:text-amber-400">
+              {hiddenRows.size} Zeile{hiddenRows.size !== 1 ? "n" : ""} ausgeblendet
+            </span>
+            <Button size="sm" variant="outline" className="ml-auto" onClick={() => setHiddenRows(new Set())}>
+              <Eye className="h-3.5 w-3.5 mr-1" /> Alle wieder einblenden
             </Button>
           </div>
         )}
