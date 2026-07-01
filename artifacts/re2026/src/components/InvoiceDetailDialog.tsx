@@ -24,18 +24,17 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatNumber } from "@/lib/format";
-import { FileText, Loader2, Crosshair, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { FileText, Loader2, Crosshair, ChevronLeft, ChevronRight, X, Calculator } from "lucide-react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-// ─── Mapping: table column ID → which fields appear in the detail form ────────
-// If a column ID is in hiddenCols, the corresponding form fields are hidden.
+// ─── Column ID type (matches InvoiceTable) ────────────────────────────────────
 type ColId =
   | "dateiname" | "rechnungssteller" | "lieferant" | "datum" | "rnr"
   | "brutto" | "mwst" | "steuer" | "netto" | "waehrung"
   | "buchung" | "bemerkung" | "freifeld1" | "freifeld2" | "freifeld3";
 
-// ─── Field labels ─────────────────────────────────────────────────────────────
+// ─── Field labels for PDF capture ─────────────────────────────────────────────
 const CAPTURE_FIELDS: { key: keyof Invoice; label: string }[] = [
   { key: "rechnungssteller", label: "Rechnungssteller" },
   { key: "rechnungsnummer",  label: "Rechnungsnummer" },
@@ -52,7 +51,19 @@ const CAPTURE_FIELDS: { key: keyof Invoice; label: string }[] = [
   { key: "freifeld3",        label: "Feld 3" },
 ];
 
-// ─── Single editable field ────────────────────────────────────────────────────
+const MWST_RATES = [0, 7, 19];
+
+// ─── Auto-calc helper ─────────────────────────────────────────────────────────
+function calcFromBruttoAndRate(brutto: number, rate: number) {
+  const netto = brutto / (1 + rate / 100);
+  const steuer = brutto - netto;
+  return {
+    nettoBetrag: Math.round(netto * 100) / 100,
+    steuerBetrag: Math.round(steuer * 100) / 100,
+  };
+}
+
+// ─── Generic editable field ───────────────────────────────────────────────────
 let _datalistCounter = 0;
 
 function DetailField({
@@ -64,8 +75,8 @@ function DetailField({
   captureField,
   onStartCapture,
   suggestions,
-  quickPicks,
   className = "",
+  readOnly = false,
 }: {
   label: string;
   fieldKey: keyof Invoice;
@@ -75,8 +86,8 @@ function DetailField({
   captureField: keyof Invoice | null;
   onStartCapture: (k: keyof Invoice) => void;
   suggestions?: string[];
-  quickPicks?: (number | string)[];
   className?: string;
+  readOnly?: boolean;
 }) {
   const [local, setLocal] = useState(value != null ? String(value) : "");
   const listId = useRef(`dl-${fieldKey}-${++_datalistCounter}`).current;
@@ -90,10 +101,82 @@ function DetailField({
     <div className={`flex flex-col gap-0.5 ${className}`}>
       <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
         {label}
+        {!readOnly && (
+          <button
+            type="button"
+            title={isCapturing ? "Warten auf Markierung…" : "Text aus PDF übernehmen"}
+            onClick={() => onStartCapture(fieldKey)}
+            className={`ml-auto p-0.5 rounded transition-colors ${
+              isCapturing
+                ? "text-blue-600 bg-blue-100 dark:bg-blue-900/40 animate-pulse"
+                : "text-muted-foreground/40 hover:text-blue-500"
+            }`}
+          >
+            <Crosshair className="h-3 w-3" />
+          </button>
+        )}
+      </label>
+      <input
+        type={type}
+        value={local}
+        list={hasSuggestions ? listId : undefined}
+        readOnly={readOnly}
+        onChange={(e) => { if (!readOnly) setLocal(e.target.value); }}
+        onBlur={() => { if (!readOnly) onSave(local.trim() || null); }}
+        className={`border rounded px-2 py-1 text-sm bg-background focus:outline-none focus:ring-1 w-full transition-all ${
+          readOnly
+            ? "bg-muted/30 text-muted-foreground cursor-default border-border/50"
+            : isCapturing
+              ? "border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800"
+              : "border-border focus:ring-primary/50"
+        }`}
+      />
+      {hasSuggestions && !readOnly && (
+        <datalist id={listId}>
+          {suggestions!.map((s) => <option key={s} value={s} />)}
+        </datalist>
+      )}
+    </div>
+  );
+}
+
+// ─── MwSt % field with dropdown + auto-calc indicator ─────────────────────────
+function MwStField({
+  value,
+  onSave,
+  captureField,
+  onStartCapture,
+  hasAutoCalc,
+}: {
+  value: string | number | null | undefined;
+  onSave: (v: string | null) => void;
+  captureField: keyof Invoice | null;
+  onStartCapture: (k: keyof Invoice) => void;
+  hasAutoCalc: boolean;
+}) {
+  const [local, setLocal] = useState(value != null ? String(value) : "");
+  useEffect(() => { setLocal(value != null ? String(value) : ""); }, [value]);
+
+  const isCapturing = captureField === "steuersatz";
+  const numVal = parseFloat(local);
+  const isPreset = MWST_RATES.includes(numVal);
+  const selectVal = isPreset ? String(numVal) : (local ? "custom" : "");
+
+  const commitRate = (v: string) => { onSave(v.trim() || null); };
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+        MwSt %
+        {hasAutoCalc && (
+          <span className="ml-1 inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400" title="Steuer und Netto werden automatisch berechnet">
+            <Calculator className="h-2.5 w-2.5" />
+          </span>
+        )}
         <button
           type="button"
           title={isCapturing ? "Warten auf Markierung…" : "Text aus PDF übernehmen"}
-          onClick={() => onStartCapture(fieldKey)}
+          onClick={() => onStartCapture("steuersatz")}
           className={`ml-auto p-0.5 rounded transition-colors ${
             isCapturing
               ? "text-blue-600 bg-blue-100 dark:bg-blue-900/40 animate-pulse"
@@ -103,37 +186,44 @@ function DetailField({
           <Crosshair className="h-3 w-3" />
         </button>
       </label>
-      <input
-        type={type}
-        value={local}
-        list={hasSuggestions ? listId : undefined}
-        onChange={(e) => setLocal(e.target.value)}
-        onBlur={() => onSave(local.trim() || null)}
-        className={`border rounded px-2 py-1 text-sm bg-background focus:outline-none focus:ring-1 w-full transition-all ${
-          isCapturing
-            ? "border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800"
-            : "border-border focus:ring-primary/50"
-        }`}
-      />
-      {hasSuggestions && (
-        <datalist id={listId}>
-          {suggestions!.map((s) => <option key={s} value={s} />)}
-        </datalist>
-      )}
-      {quickPicks && quickPicks.length > 0 && (
-        <div className="flex gap-1 mt-0.5">
-          {quickPicks.map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => { const str = String(v); setLocal(str); onSave(str); }}
-              className="px-1.5 py-0.5 text-xs rounded border border-border bg-muted/50 hover:bg-muted hover:border-primary/40 transition-colors text-muted-foreground hover:text-foreground"
-            >
-              {v}%
-            </button>
-          ))}
-        </div>
-      )}
+
+      <div className="flex gap-1.5">
+        {/* Dropdown for preset rates */}
+        <Select
+          value={selectVal}
+          onValueChange={(v) => {
+            if (v !== "custom") {
+              setLocal(v);
+              commitRate(v);
+            }
+          }}
+        >
+          <SelectTrigger className={`h-8 w-24 shrink-0 text-sm ${isCapturing ? "border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800" : ""}`}>
+            <SelectValue placeholder="—" />
+          </SelectTrigger>
+          <SelectContent>
+            {MWST_RATES.map((r) => (
+              <SelectItem key={r} value={String(r)}>{r} %</SelectItem>
+            ))}
+            <SelectItem value="custom">Sonstige…</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Free-text input for custom rate */}
+        <input
+          type="text"
+          inputMode="decimal"
+          value={local}
+          placeholder="z.B. 10.7"
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={() => commitRate(local)}
+          className={`flex-1 border rounded px-2 py-1 text-sm bg-background focus:outline-none focus:ring-1 w-full transition-all ${
+            isCapturing
+              ? "border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800"
+              : "border-border focus:ring-primary/50"
+          }`}
+        />
+      </div>
     </div>
   );
 }
@@ -165,10 +255,7 @@ function PdfViewer({
   }, []);
 
   useEffect(() => {
-    setPage(1);
-    setLoading(true);
-    setError(false);
-    setNumPages(null);
+    setPage(1); setLoading(true); setError(false); setNumPages(null);
   }, [invoiceId]);
 
   const handleMouseUp = useCallback(() => {
@@ -263,25 +350,50 @@ export function InvoiceDetailDialog({
     },
   });
 
-  const handleUpdate = (field: keyof Invoice, rawValue: string | null) => {
+  // ── Update with optional auto-calc ────────────────────────────────────────
+  const handleUpdate = useCallback((field: keyof Invoice, rawValue: string | null) => {
     if (!invoice) return;
+
     let parsedValue: string | number | null = rawValue;
     if (["bruttoBetrag", "steuersatz", "steuerBetrag", "nettoBetrag"].includes(field as string)) {
       parsedValue = rawValue ? (parseFloat(rawValue.replace(",", ".")) || null) : null;
     } else if (field === "lieferantId") {
       parsedValue = rawValue ? parseInt(rawValue, 10) : null;
     }
-    updateMutation.mutate({ id: invoice.id, data: { [field]: parsedValue } });
-  };
+
+    const updates: Record<string, string | number | null> = { [field]: parsedValue };
+
+    // Auto-calculate Steuer + Netto when Brutto or Steuersatz changes
+    if (field === "bruttoBetrag" || field === "steuersatz") {
+      const brutto =
+        field === "bruttoBetrag"
+          ? (parsedValue as number | null)
+          : invoice.bruttoBetrag;
+      const rate =
+        field === "steuersatz"
+          ? (parsedValue as number | null)
+          : (invoice.steuersatz != null ? parseFloat(String(invoice.steuersatz)) : null);
+
+      if (brutto != null && rate != null && !isNaN(brutto) && !isNaN(rate)) {
+        const { nettoBetrag, steuerBetrag } = calcFromBruttoAndRate(brutto, rate);
+        updates.nettoBetrag = nettoBetrag;
+        updates.steuerBetrag = steuerBetrag;
+      }
+    }
+
+    updateMutation.mutate({ id: invoice.id, data: updates });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice?.id, invoice?.bruttoBetrag, invoice?.steuersatz]);
 
   const handleCapture = useCallback((text: string) => {
     if (!captureField || !invoice) return;
     const label = CAPTURE_FIELDS.find((f) => f.key === captureField)?.label ?? String(captureField);
-    updateMutation.mutate({ id: invoice.id, data: { [captureField]: text } });
+    // For numeric capture fields, also trigger auto-calc if applicable
+    handleUpdate(captureField, text);
     toast.success(`"${text.slice(0, 40)}${text.length > 40 ? "…" : ""}" → ${label}`);
     setCaptureField(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [captureField, invoice?.id]);
+  }, [captureField, handleUpdate]);
 
   if (!invoice) return null;
 
@@ -297,13 +409,16 @@ export function InvoiceDetailDialog({
   const title = invoice.rechnungssteller || invoice.dateiname || `Rechnung #${invoice.id}`;
 
   // Check which sections have at least one visible field
-  const showBrutto    = show("brutto");
-  const showMwst      = show("mwst");
-  const showSteuer    = show("steuer");
-  const showNetto     = show("netto");
-  const showAmounts   = showBrutto || showMwst || showSteuer || showNetto;
+  const showBrutto  = show("brutto");
+  const showMwst    = show("mwst");
+  const showSteuer  = show("steuer");
+  const showNetto   = show("netto");
+  const showAmounts = showBrutto || showMwst || showSteuer || showNetto;
   const showNotizenSection = show("buchung") || show("bemerkung");
   const showFreiSection = show("freifeld1") || show("freifeld2") || show("freifeld3");
+
+  // Whether brutto+mwst are both present → auto-calc is active
+  const hasAutoCalc = invoice.bruttoBetrag != null && invoice.steuersatz != null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -335,7 +450,7 @@ export function InvoiceDetailDialog({
         </div>
 
         {/* ── Right: form ──────────────────────────────────────────────────── */}
-        <div className="w-[400px] shrink-0 flex flex-col overflow-hidden">
+        <div className="w-[420px] shrink-0 flex flex-col overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border bg-muted/20 shrink-0 flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-semibold truncate">{title}</p>
@@ -394,25 +509,56 @@ export function InvoiceDetailDialog({
             {/* Beträge */}
             {showAmounts && (
               <>
+                {/* Brutto + MwSt % row */}
                 {(showBrutto || showMwst) && (
                   <div className={`grid gap-3 ${showBrutto && showMwst ? "grid-cols-2" : "grid-cols-1"}`}>
                     {showBrutto && (
-                      <DetailField label="Brutto" value={invoice.bruttoBetrag != null ? formatNumber(invoice.bruttoBetrag) : null} {...fieldProps("bruttoBetrag")} />
+                      <DetailField
+                        label="Brutto"
+                        value={invoice.bruttoBetrag != null ? formatNumber(invoice.bruttoBetrag) : null}
+                        {...fieldProps("bruttoBetrag")}
+                      />
                     )}
                     {showMwst && (
-                      <DetailField label="MwSt %" value={invoice.steuersatz != null ? String(invoice.steuersatz) : null} quickPicks={[7, 19]} {...fieldProps("steuersatz")} />
+                      <MwStField
+                        value={invoice.steuersatz != null ? String(invoice.steuersatz) : null}
+                        onSave={(v) => handleUpdate("steuersatz", v)}
+                        captureField={captureField}
+                        onStartCapture={(k) => setCaptureField((prev) => (prev === k ? null : k))}
+                        hasAutoCalc={hasAutoCalc}
+                      />
                     )}
                   </div>
                 )}
+
+                {/* Steuer + Netto row (auto-filled) */}
                 {(showSteuer || showNetto) && (
                   <div className={`grid gap-3 ${showSteuer && showNetto ? "grid-cols-2" : "grid-cols-1"}`}>
                     {showSteuer && (
-                      <DetailField label="Steuer" value={invoice.steuerBetrag != null ? formatNumber(invoice.steuerBetrag) : null} {...fieldProps("steuerBetrag")} />
+                      <DetailField
+                        label={hasAutoCalc ? "Steuer (auto)" : "Steuer"}
+                        value={invoice.steuerBetrag != null ? formatNumber(invoice.steuerBetrag) : null}
+                        readOnly={hasAutoCalc}
+                        {...fieldProps("steuerBetrag")}
+                      />
                     )}
                     {showNetto && (
-                      <DetailField label="Netto" value={invoice.nettoBetrag != null ? formatNumber(invoice.nettoBetrag) : null} {...fieldProps("nettoBetrag")} />
+                      <DetailField
+                        label={hasAutoCalc ? "Netto (auto)" : "Netto"}
+                        value={invoice.nettoBetrag != null ? formatNumber(invoice.nettoBetrag) : null}
+                        readOnly={hasAutoCalc}
+                        {...fieldProps("nettoBetrag")}
+                      />
                     )}
                   </div>
+                )}
+
+                {/* Auto-calc hint */}
+                {hasAutoCalc && (showSteuer || showNetto) && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 -mt-1">
+                    <Calculator className="h-3 w-3" />
+                    Steuer und Netto werden automatisch aus Brutto × MwSt % berechnet.
+                  </p>
                 )}
               </>
             )}

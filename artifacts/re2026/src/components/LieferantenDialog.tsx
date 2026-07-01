@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   useListLieferanten,
   useCreateLieferant,
@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pencil, Trash2, Plus, Check, X } from "lucide-react";
+import { Pencil, Trash2, Plus, Check, X, Download, Upload, Loader2 } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -38,6 +38,8 @@ export function LieferantenDialog({ open, onOpenChange }: Props) {
   const queryClient = useQueryClient();
   const { data: lieferanten = [] } = useListLieferanten();
   const [editing, setEditing] = useState<EditState | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: getListLieferantenQueryKey() });
@@ -84,12 +86,101 @@ export function LieferantenDialog({ open, onOpenChange }: Props) {
     steuernummer: l.steuernummer ?? "",
   });
 
+  // ── Export ────────────────────────────────────────────────────────────────
+  const handleExport = async () => {
+    try {
+      const res = await fetch("/api/lieferanten/export");
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "lieferanten.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Export fehlgeschlagen");
+    }
+  };
+
+  // ── Import ────────────────────────────────────────────────────────────────
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setImporting(true);
+    try {
+      // Try UTF-8 first, fall back to ISO-8859-1
+      let text: string;
+      try {
+        text = await file.text();
+        if (text.includes("�")) throw new Error("bad encoding");
+      } catch {
+        text = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsText(file, "ISO-8859-1");
+        });
+      }
+
+      const res = await fetch("/api/lieferanten/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: text }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        toast.error(err.error ?? "Import fehlgeschlagen");
+        return;
+      }
+
+      const { imported, skipped } = await res.json() as { imported: number; skipped: number };
+      invalidate();
+      toast.success(
+        `${imported} Lieferant${imported !== 1 ? "en" : ""} importiert` +
+        (skipped > 0 ? `, ${skipped} übersprungen (bereits vorhanden)` : "")
+      );
+    } catch {
+      toast.error("Import fehlgeschlagen");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Lieferantenverzeichnis</DialogTitle>
         </DialogHeader>
+
+        {/* Import / Export row */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline" size="sm"
+            onClick={handleExport}
+            disabled={lieferanten.length === 0}
+            title="Alle Lieferanten als CSV exportieren"
+          >
+            <Download className="h-3.5 w-3.5 mr-1" /> Exportieren
+          </Button>
+          <Button
+            variant="outline" size="sm"
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            title="Lieferanten aus CSV importieren (eigenes Format oder Lexware-Kontakte-Export)"
+          >
+            {importing ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
+            Importieren
+          </Button>
+          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+          <span className="text-xs text-muted-foreground ml-auto">
+            {lieferanten.length} Eintrag{lieferanten.length !== 1 ? "einträge" : ""}
+          </span>
+        </div>
 
         {/* New / Edit form */}
         {editing !== null ? (
@@ -109,19 +200,19 @@ export function LieferantenDialog({ open, onOpenChange }: Props) {
                 />
               </div>
               <div>
-                <Label className="text-xs">Kürzel</Label>
+                <Label className="text-xs">Kürzel / Lieferantennr.</Label>
                 <Input
                   value={editing.kuerzel}
                   onChange={(e) => setEditing({ ...editing, kuerzel: e.target.value })}
-                  placeholder="z.B. MUSTER"
+                  placeholder="z.B. 70001"
                 />
               </div>
               <div>
-                <Label className="text-xs">Steuernummer</Label>
+                <Label className="text-xs">Steuernummer / USt-IdNr.</Label>
                 <Input
                   value={editing.steuernummer}
                   onChange={(e) => setEditing({ ...editing, steuernummer: e.target.value })}
-                  placeholder="z.B. 123/456/78901"
+                  placeholder="z.B. DE123456789"
                 />
               </div>
             </div>
@@ -135,12 +226,7 @@ export function LieferantenDialog({ open, onOpenChange }: Props) {
             </div>
           </div>
         ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => setEditing(EMPTY)}
-          >
+          <Button variant="outline" size="sm" className="w-full" onClick={() => setEditing(EMPTY)}>
             <Plus className="h-4 w-4 mr-1" /> Neuer Lieferant
           </Button>
         )}
@@ -148,7 +234,9 @@ export function LieferantenDialog({ open, onOpenChange }: Props) {
         {/* List */}
         <div className="max-h-72 overflow-y-auto divide-y divide-border border border-border rounded-md">
           {lieferanten.length === 0 && (
-            <p className="text-sm text-muted-foreground p-4 text-center">Noch keine Lieferanten</p>
+            <p className="text-sm text-muted-foreground p-4 text-center">
+              Noch keine Lieferanten — importieren oder manuell anlegen
+            </p>
           )}
           {lieferanten.map((l) => (
             <div key={l.id} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/20">
@@ -160,10 +248,7 @@ export function LieferantenDialog({ open, onOpenChange }: Props) {
                   </p>
                 )}
               </div>
-              <Button
-                variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                onClick={() => setEditing(fromLieferant(l))}
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditing(fromLieferant(l))}>
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
               <Button
@@ -176,6 +261,10 @@ export function LieferantenDialog({ open, onOpenChange }: Props) {
             </div>
           ))}
         </div>
+
+        <p className="text-xs text-muted-foreground">
+          Import unterstützt: eigenes CSV-Format sowie Lexware-Kontakte-Export (Semikolon-getrennt, ISO-8859-1 oder UTF-8).
+        </p>
       </DialogContent>
     </Dialog>
   );

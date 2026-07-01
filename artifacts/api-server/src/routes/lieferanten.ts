@@ -54,4 +54,78 @@ router.delete("/lieferanten/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ';' && !inQ) {
+      result.push(cur.trim()); cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function csvEsc(s: string | null): string {
+  const v = s ?? "";
+  return v.includes(";") || v.includes('"') || v.includes("\n")
+    ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+// ─── Export: GET /api/lieferanten/export ─────────────────────────────────────
+router.get("/lieferanten/export", async (_req, res): Promise<void> => {
+  const rows = await db.select().from(lieferantenTable).orderBy(lieferantenTable.name);
+  const lines = ["Name;Kuerzel;Steuernummer"];
+  for (const r of rows) {
+    lines.push([csvEsc(r.name), csvEsc(r.kuerzel), csvEsc(r.steuernummer)].join(";"));
+  }
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="lieferanten.csv"');
+  res.send("\uFEFF" + lines.join("\r\n"));
+});
+
+// ─── Import: POST /api/lieferanten/import ────────────────────────────────────
+router.post("/lieferanten/import", async (req, res): Promise<void> => {
+  const { csv } = req.body as { csv?: string };
+  if (!csv || typeof csv !== "string") { res.status(400).json({ error: "csv erforderlich" }); return; }
+
+  const lines = csv.replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) { res.status(400).json({ error: "Keine Daten gefunden" }); return; }
+
+  const headers = parseCsvLine(lines[0]);
+  const isLexware = headers.includes("Firmenname");
+
+  const nameIdx    = isLexware ? headers.indexOf("Firmenname")         : 0;
+  const kuerzelIdx = isLexware ? headers.indexOf("Lieferantennummer")  : 1;
+  const stNrIdx    = isLexware ? headers.indexOf("Steuernummer")       : 2;
+  const ustIdIdx   = isLexware ? headers.indexOf("Umsatzsteuer ID")    : -1;
+
+  const existing = await db.select({ name: lieferantenTable.name }).from(lieferantenTable);
+  const existingNames = new Set(existing.map((r) => r.name.toLowerCase()));
+
+  let imported = 0, skipped = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    const name = cols[nameIdx] ?? "";
+    if (!name) { skipped++; continue; }
+    if (existingNames.has(name.toLowerCase())) { skipped++; continue; }
+
+    const kuerzel     = cols[kuerzelIdx] || null;
+    const steuernummer = cols[stNrIdx] || (ustIdIdx >= 0 ? cols[ustIdIdx] : null) || null;
+
+    await db.insert(lieferantenTable).values({ name, kuerzel, steuernummer });
+    existingNames.add(name.toLowerCase());
+    imported++;
+  }
+
+  res.json({ imported, skipped });
+});
+
 export default router;
