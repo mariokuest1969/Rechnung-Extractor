@@ -1,4 +1,1 @@
-- [Radix Dialog + native select crash](radix-dialog-native-select.md) — native <select> inside Radix Dialog closes the dialog on option pick; always use Radix <Select> inside dialogs.
-- [pdf-extractor steuersatz overflow](steuersatz-regex.md) — steuersatz regex must be constrained to 1–2 digits and validated in range 1–50 to avoid numeric DB overflow.
-- [pdfjs worker in Vite strict mode](pdfjs-worker.md) — with fs.strict:true, ?url import of pdfjs worker fails; copy worker to /public and reference as "/pdf.worker.min.mjs".
-- [React hooks before conditional return](hooks-order.md) — useCallback/useEffect must come before any if(!x) return null; otherwise React throws Rules of Hooks violation at runtime.
+- [Invoice AI extraction fallback](invoice-extraction-fallback.md) — empty/garbage invoice fields across many rows = AI extractor failed and silently used regex; check logs for 429/insufficient_quota. Dev & prod DBs are separate.
