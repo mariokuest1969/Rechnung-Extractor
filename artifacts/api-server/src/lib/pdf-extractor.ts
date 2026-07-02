@@ -20,10 +20,20 @@ export interface ExtractedInvoice {
   bemerkung: string | null;
 }
 
+// Prefer the Replit AI Integrations proxy (no own OpenAI quota needed);
+// fall back to a direct OPENAI_API_KEY if the integration is not configured.
+const AI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+const AI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+function hasAiExtraction(): boolean {
+  return !!(AI_BASE_URL && AI_API_KEY) || !!process.env.OPENAI_API_KEY;
+}
+
 async function extractWithAI(text: string): Promise<ExtractedInvoice> {
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  const client =
+    AI_BASE_URL && AI_API_KEY
+      ? new OpenAI({ baseURL: AI_BASE_URL, apiKey: AI_API_KEY })
+      : new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const prompt = `Du bist ein Experte für die Analyse von Rechnungen. Extrahiere aus folgendem Rechnungstext die strukturierten Daten.
 
@@ -179,9 +189,7 @@ export async function extractInvoiceFromPDF(
     };
   }
 
-  const hasOpenAI = !!process.env.OPENAI_API_KEY;
-
-  if (hasOpenAI) {
+  if (hasAiExtraction()) {
     try {
       logger.info({ filename }, "Extracting invoice with OpenAI");
       return await extractWithAI(text);
@@ -192,7 +200,7 @@ export async function extractInvoiceFromPDF(
       );
     }
   } else {
-    logger.info({ filename }, "No OPENAI_API_KEY, using regex extraction");
+    logger.info({ filename }, "No AI credentials, using regex extraction");
   }
 
   return extractWithRegex(text);
