@@ -32,26 +32,10 @@ function createOpenAIClient(): OpenAI {
     : new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-async function extractTextFromScannedPage(
-  page: {
-    getViewport: (options: { scale: number }) => { width: number; height: number };
-    render: (options: Record<string, unknown>) => { promise: Promise<unknown> };
-  },
+async function recognizeScannedImage(
+  image: Buffer,
   pageNumber: number
 ): Promise<string> {
-  const viewport = page.getViewport({ scale: OCR_RENDER_SCALE });
-  const canvas = createCanvas(
-    Math.ceil(viewport.width),
-    Math.ceil(viewport.height)
-  );
-  const context = canvas.getContext("2d");
-
-  await page.render({
-    canvasContext: context,
-    viewport,
-  }).promise;
-
-  const image = canvas.toBuffer("image/jpeg", 85);
   const response = await createOpenAIClient().chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
@@ -79,9 +63,49 @@ async function extractTextFromScannedPage(
   return response.choices[0]?.message?.content?.trim() ?? "";
 }
 
-async function extractPages(
+type RecognizeScannedImage = (
+  image: Buffer,
+  pageNumber: number
+) => Promise<string>;
+
+async function extractTextFromScannedPage(
+  page: {
+    getViewport: (options: { scale: number }) => { width: number; height: number };
+    render: (options: Record<string, unknown>) => { promise: Promise<unknown> };
+  },
+  pageNumber: number,
+  recognizeImage: RecognizeScannedImage
+): Promise<string> {
+  const viewport = page.getViewport({ scale: OCR_RENDER_SCALE });
+  const canvas = createCanvas(
+    Math.ceil(viewport.width),
+    Math.ceil(viewport.height)
+  );
+  const context = canvas.getContext("2d");
+
+  await page.render({
+    canvasContext: context,
+    viewport,
+  }).promise;
+
+  const image = canvas.toBuffer("image/jpeg", 85);
+  return recognizeImage(image, pageNumber);
+}
+
+interface PageExtractionDependencies {
+  isOcrAvailable: () => boolean;
+  recognizeScannedImage: RecognizeScannedImage;
+}
+
+const defaultPageExtractionDependencies: PageExtractionDependencies = {
+  isOcrAvailable: hasAiExtraction,
+  recognizeScannedImage,
+};
+
+export async function extractPages(
   buffer: Buffer,
-  filename: string
+  filename: string,
+  dependencies: PageExtractionDependencies = defaultPageExtractionDependencies
 ): Promise<{ text: string; pageCount: number }> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const document = await pdfjs.getDocument({
@@ -106,7 +130,7 @@ async function extractPages(
           continue;
         }
 
-        if (!hasAiExtraction()) {
+        if (!dependencies.isOcrAvailable()) {
           logger.warn(
             { filename, pageNumber },
             "PDF page has no embedded text and OCR is unavailable"
@@ -114,7 +138,11 @@ async function extractPages(
           continue;
         }
 
-        const ocrText = await extractTextFromScannedPage(page, pageNumber);
+        const ocrText = await extractTextFromScannedPage(
+          page,
+          pageNumber,
+          dependencies.recognizeScannedImage
+        );
         if (ocrText) {
           pageTexts.push(`[Seite ${pageNumber}, OCR]\n${ocrText}`);
         }
