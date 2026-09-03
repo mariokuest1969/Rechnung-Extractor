@@ -9,6 +9,7 @@ import { extractInvoiceFromPDF } from "./pdf-extractor";
 import { logger } from "./logger";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_FILES_PER_SYNC = 100;
 
 interface DropboxEntry {
   ".tag": string;
@@ -54,9 +55,9 @@ async function listDropboxPDFs(
   folder: string,
   token: string | null
 ): Promise<DropboxEntry[]> {
-  const response = await dropboxPost(
+  let response = await dropboxPost(
     "/2/files/list_folder",
-    { path: folder, recursive: false },
+    { path: folder, recursive: true },
     token
   );
 
@@ -65,8 +66,28 @@ async function listDropboxPDFs(
     throw new Error(`Dropbox list_folder ${response.status}: ${text}`);
   }
 
-  const data = (await response.json()) as ListFolderResult;
-  return data.entries.filter(
+  let data = (await response.json()) as ListFolderResult;
+  const entries = [...data.entries];
+
+  while (data.has_more) {
+    response = await dropboxPost(
+      "/2/files/list_folder/continue",
+      { cursor: data.cursor },
+      token
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(
+        `Dropbox list_folder/continue ${response.status}: ${text}`
+      );
+    }
+
+    data = (await response.json()) as ListFolderResult;
+    entries.push(...data.entries);
+  }
+
+  return entries.filter(
     (e) => e[".tag"] === "file" && e.name.toLowerCase().endsWith(".pdf")
   );
 }
@@ -149,6 +170,12 @@ export async function syncDropbox(): Promise<SyncResult> {
   }
 
   logger.info({ count: files.length, folder }, "Dropbox: found PDF files");
+
+  if (files.length > MAX_FILES_PER_SYNC) {
+    throw new Error(
+      `Dropbox sync stopped: ${files.length} PDFs found below ${folder}. Configure a more specific invoice folder (maximum ${MAX_FILES_PER_SYNC} PDFs per sync).`
+    );
+  }
 
   for (const file of files) {
     const existing = await db
