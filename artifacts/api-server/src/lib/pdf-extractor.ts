@@ -14,22 +14,25 @@ export interface ExtractedInvoice {
   bemerkung: string | null;
 }
 
-// Prefer the Replit AI Integrations proxy (no own OpenAI quota needed);
-// fall back to a direct OPENAI_API_KEY if the integration is not configured.
-const AI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-const AI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-
 function hasAiExtraction(): boolean {
-  return !!(AI_BASE_URL && AI_API_KEY) || !!process.env.OPENAI_API_KEY;
+  return !!(
+    process.env.AI_INTEGRATIONS_OPENAI_BASE_URL &&
+    process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+  );
 }
 
 const MAX_AI_TEXT_LENGTH = 24_000;
 const OCR_RENDER_SCALE = 2;
 
 function createOpenAIClient(): OpenAI {
-  return AI_BASE_URL && AI_API_KEY
-    ? new OpenAI({ baseURL: AI_BASE_URL, apiKey: AI_API_KEY })
-    : new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+  if (!baseURL || !apiKey) {
+    throw new Error("Replit AI integration is not configured");
+  }
+
+  return new OpenAI({ baseURL, apiKey });
 }
 
 async function recognizeScannedImage(
@@ -357,16 +360,19 @@ export async function extractInvoiceFromPDF(
 
   if (hasAiExtraction()) {
     try {
-      logger.info({ filename, pageCount }, "Extracting invoice with OpenAI");
+      logger.info({ filename, pageCount }, "Extracting invoice with Replit AI");
       return await extractWithAI(text, pageCount);
     } catch (err) {
       logger.warn(
         { err, filename },
-        "OpenAI extraction failed, falling back to regex"
+        "Replit AI extraction failed, falling back to regex"
       );
     }
   } else {
-    logger.info({ filename }, "No AI credentials, using regex extraction");
+    logger.warn(
+      { filename },
+      "Replit AI integration unavailable, using regex extraction"
+    );
   }
 
   return extractWithRegex(text);
