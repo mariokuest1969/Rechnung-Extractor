@@ -29,16 +29,46 @@ function hasAiExtraction(): boolean {
   return !!(AI_BASE_URL && AI_API_KEY) || !!process.env.OPENAI_API_KEY;
 }
 
-async function extractWithAI(text: string): Promise<ExtractedInvoice> {
+const MAX_AI_TEXT_LENGTH = 24_000;
+
+function prepareTextForAI(text: string): string {
+  const normalized = text
+    .replace(/\u0000/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{4,}/g, "\n\n\n")
+    .trim();
+
+  if (normalized.length <= MAX_AI_TEXT_LENGTH) return normalized;
+
+  const sectionLength = Math.floor(MAX_AI_TEXT_LENGTH / 3);
+  const middleStart = Math.max(
+    0,
+    Math.floor(normalized.length / 2 - sectionLength / 2)
+  );
+
+  return [
+    normalized.slice(0, sectionLength),
+    "\n\n[... mittlerer Dokumentbereich ...]\n\n",
+    normalized.slice(middleStart, middleStart + sectionLength),
+    "\n\n[... letzter Dokumentbereich ...]\n\n",
+    normalized.slice(-sectionLength),
+  ].join("");
+}
+
+async function extractWithAI(
+  text: string,
+  pageCount: number
+): Promise<ExtractedInvoice> {
   const client =
     AI_BASE_URL && AI_API_KEY
       ? new OpenAI({ baseURL: AI_BASE_URL, apiKey: AI_API_KEY })
       : new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  const prompt = `Du bist ein Experte für die Analyse von Rechnungen. Extrahiere aus folgendem Rechnungstext die strukturierten Daten.
+  const preparedText = prepareTextForAI(text);
+  const prompt = `Du bist ein Experte für die Analyse von Rechnungen. Das Dokument hat ${pageCount} Seite${pageCount === 1 ? "" : "n"}. Berücksichtige ausdrücklich den Inhalt ALLER Seiten und extrahiere aus dem gesamten Rechnungstext die strukturierten Daten.
 
 Rechnungstext:
-${text.substring(0, 4000)}
+${preparedText}
 
 Antworte NUR mit einem JSON-Objekt (kein Markdown, kein Text drumherum) mit diesen Feldern:
 - rechnungssteller: Name des Rechnungsstellers/Lieferanten (string oder null)
@@ -168,9 +198,15 @@ export async function extractInvoiceFromPDF(
   filename: string
 ): Promise<ExtractedInvoice> {
   let text = "";
+  let pageCount = 0;
   try {
     const parsed = await pdfParse(buffer);
     text = parsed.text;
+    pageCount = parsed.numpages;
+    logger.info(
+      { filename, pageCount, extractedCharacters: text.length },
+      "PDF text extracted"
+    );
   } catch (err) {
     logger.warn({ err, filename }, "pdf-parse failed, using empty text");
   }
@@ -191,8 +227,8 @@ export async function extractInvoiceFromPDF(
 
   if (hasAiExtraction()) {
     try {
-      logger.info({ filename }, "Extracting invoice with OpenAI");
-      return await extractWithAI(text);
+      logger.info({ filename, pageCount }, "Extracting invoice with OpenAI");
+      return await extractWithAI(text, pageCount);
     } catch (err) {
       logger.warn(
         { err, filename },
