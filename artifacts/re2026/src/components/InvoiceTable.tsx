@@ -617,6 +617,10 @@ export function InvoiceTable() {
 
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkReextractProgress, setBulkReextractProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const handleBulkDelete = async () => {
     setIsBulkDeleting(true);
@@ -687,6 +691,61 @@ export function InvoiceTable() {
       ? invoices.filter((invoice) => selected.has(invoice.id))
       : invoices;
 
+  const handleBulkReextract = async () => {
+    const candidates = (
+      selectedIds.length > 0
+        ? invoices.filter((invoice) => selected.has(invoice.id))
+        : invoices.filter((invoice) => (invoice.positionen?.length ?? 0) === 0)
+    ).filter((invoice) => invoice.dropboxFileId);
+
+    if (candidates.length === 0) {
+      toast.info(
+        selectedIds.length > 0
+          ? "Keine der ausgewählten Rechnungen besitzt eine Dropbox-Datei."
+          : "Alle Dropbox-Rechnungen enthalten bereits Positionen."
+      );
+      return;
+    }
+
+    setBulkReextractProgress({ done: 0, total: candidates.length });
+    let succeeded = 0;
+    let failed = 0;
+
+    for (let index = 0; index < candidates.length; index += 1) {
+      const invoice = candidates[index]!;
+      try {
+        const response = await fetch(`/api/invoices/${invoice.id}/reextract`, {
+          method: "POST",
+        });
+        if (!response.ok) throw new Error(await response.text());
+        succeeded += 1;
+      } catch {
+        failed += 1;
+      } finally {
+        setBulkReextractProgress({
+          done: index + 1,
+          total: candidates.length,
+        });
+      }
+    }
+
+    await queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+    await queryClient.invalidateQueries({
+      queryKey: getGetInvoiceStatsQueryKey(),
+    });
+    setBulkReextractProgress(null);
+
+    if (failed === 0) {
+      toast.success(
+        `${succeeded} Rechnung${succeeded !== 1 ? "en" : ""} mit Positionen aktualisiert`
+      );
+    } else {
+      toast.warning(
+        `${succeeded} aktualisiert, ${failed} fehlgeschlagen. Bitte Dropbox-Verbindung prüfen.`
+      );
+    }
+  };
+
   const exportPositions = (format: "csv" | "xlsx") => {
     const count =
       format === "csv"
@@ -743,6 +802,26 @@ export function InvoiceTable() {
             </Button>
             <Button variant="outline" size="sm" onClick={() => exportPositions("xlsx")}>
               Positionen Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkReextract}
+              disabled={bulkReextractProgress !== null}
+              title={
+                selectedIds.length > 0
+                  ? "Ausgewählte Rechnungen neu auslesen"
+                  : "Bestehende Dropbox-Rechnungen ohne Positionen nachholen"
+              }
+            >
+              {bulkReextractProgress ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-1" />
+              )}
+              {bulkReextractProgress
+                ? `Positionen ${bulkReextractProgress.done}/${bulkReextractProgress.total}`
+                : "Positionen nachholen"}
             </Button>
 
             {/* ── Column picker ─────────────────────────────────────────── */}
