@@ -1,10 +1,4 @@
-// Import the lib directly to avoid pdf-parse's module-level debug test that
-// tries to open ./test/data/05-versions-space.pdf relative to cwd.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
-  dataBuffer: Buffer,
-  options?: Record<string, unknown>
-) => Promise<{ text: string; numpages: number }>;
+import { createCanvas } from "@napi-rs/canvas";
 import OpenAI from "openai";
 import { logger } from "./logger";
 
@@ -30,6 +24,117 @@ function hasAiExtraction(): boolean {
 }
 
 const MAX_AI_TEXT_LENGTH = 24_000;
+const OCR_RENDER_SCALE = 2;
+
+function createOpenAIClient(): OpenAI {
+  return AI_BASE_URL && AI_API_KEY
+    ? new OpenAI({ baseURL: AI_BASE_URL, apiKey: AI_API_KEY })
+    : new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+async function extractTextFromScannedPage(
+  page: {
+    getViewport: (options: { scale: number }) => { width: number; height: number };
+    render: (options: Record<string, unknown>) => { promise: Promise<unknown> };
+  },
+  pageNumber: number
+): Promise<string> {
+  const viewport = page.getViewport({ scale: OCR_RENDER_SCALE });
+  const canvas = createCanvas(
+    Math.ceil(viewport.width),
+    Math.ceil(viewport.height)
+  );
+  const context = canvas.getContext("2d");
+
+  await page.render({
+    canvasContext: context,
+    viewport,
+  }).promise;
+
+  const image = canvas.toBuffer("image/jpeg", 85);
+  const response = await createOpenAIClient().chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Lies den gesamten Text dieser eingescannten Rechnungsseite (${pageNumber}) per OCR aus. Gib ausschließlich den erkannten Text in natürlicher Lesereihenfolge zurück. Erfinde keine Inhalte.`,
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:image/jpeg;base64,${image.toString("base64")}`,
+              detail: "high",
+            },
+          },
+        ],
+      },
+    ],
+    max_tokens: 4096,
+    temperature: 0,
+  });
+
+  return response.choices[0]?.message?.content?.trim() ?? "";
+}
+
+async function extractPages(
+  buffer: Buffer,
+  filename: string
+): Promise<{ text: string; pageCount: number }> {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const document = await pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+  }).promise;
+  const pageCount = document.numPages;
+  const pageTexts: string[] = [];
+
+  try {
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+      try {
+        const page = await document.getPage(pageNumber);
+        const content = await page.getTextContent();
+        const embeddedText = content.items
+          .map((item) => ("str" in item ? item.str : ""))
+          .join(" ")
+          .trim();
+
+        if (embeddedText) {
+          pageTexts.push(`[Seite ${pageNumber}]\n${embeddedText}`);
+          continue;
+        }
+
+        if (!hasAiExtraction()) {
+          logger.warn(
+            { filename, pageNumber },
+            "PDF page has no embedded text and OCR is unavailable"
+          );
+          continue;
+        }
+
+        const ocrText = await extractTextFromScannedPage(page, pageNumber);
+        if (ocrText) {
+          pageTexts.push(`[Seite ${pageNumber}, OCR]\n${ocrText}`);
+        }
+        logger.info(
+          { filename, pageNumber, extractedCharacters: ocrText.length },
+          "Scanned PDF page processed with OCR"
+        );
+      } catch (err) {
+        logger.warn(
+          { err, filename, pageNumber },
+          "PDF page extraction failed, continuing with remaining pages"
+        );
+      }
+    }
+  } finally {
+    await document.destroy();
+  }
+
+  return { text: pageTexts.join("\n\n"), pageCount };
+}
 
 function prepareTextForAI(text: string): string {
   const normalized = text
@@ -59,10 +164,7 @@ async function extractWithAI(
   text: string,
   pageCount: number
 ): Promise<ExtractedInvoice> {
-  const client =
-    AI_BASE_URL && AI_API_KEY
-      ? new OpenAI({ baseURL: AI_BASE_URL, apiKey: AI_API_KEY })
-      : new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = createOpenAIClient();
 
   const preparedText = prepareTextForAI(text);
   const prompt = `Du bist ein Experte für die Analyse von Rechnungen. Das Dokument hat ${pageCount} Seite${pageCount === 1 ? "" : "n"}. Berücksichtige ausdrücklich den Inhalt ALLER Seiten und extrahiere aus dem gesamten Rechnungstext die strukturierten Daten.
@@ -200,15 +302,15 @@ export async function extractInvoiceFromPDF(
   let text = "";
   let pageCount = 0;
   try {
-    const parsed = await pdfParse(buffer);
+    const parsed = await extractPages(buffer, filename);
     text = parsed.text;
-    pageCount = parsed.numpages;
+    pageCount = parsed.pageCount;
     logger.info(
       { filename, pageCount, extractedCharacters: text.length },
       "PDF text extracted"
     );
   } catch (err) {
-    logger.warn({ err, filename }, "pdf-parse failed, using empty text");
+    logger.warn({ err, filename }, "PDF extraction failed, using empty text");
   }
 
   if (!text.trim()) {
