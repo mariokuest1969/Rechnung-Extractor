@@ -56,6 +56,24 @@ export interface BuchungskontoCreate {
   bezeichnung: string;
 }
 
+export interface InvoicePosition {
+  /** @nullable */
+  positionsnummer?: string | null;
+  beschreibung: string;
+  /** @nullable */
+  menge?: number | null;
+  /** @nullable */
+  einheit?: string | null;
+  /** @nullable */
+  einzelpreis?: number | null;
+  /** @nullable */
+  steuersatz?: number | null;
+  /** @nullable */
+  nettobetrag?: number | null;
+  /** @nullable */
+  bruttobetrag?: number | null;
+}
+
 export interface Invoice {
   id: number;
   /** @nullable */
@@ -98,6 +116,7 @@ export interface Invoice {
   dateiname?: string | null;
   /** @nullable */
   dropboxFileId?: string | null;
+  positionen?: InvoicePosition[];
   createdAt: string;
 }
 
@@ -164,6 +183,7 @@ export interface InvoicePreview {
   waehrung?: string | null;
   /** @nullable */
   bemerkung?: string | null;
+  positionen?: InvoicePosition[];
 }
 
 /**

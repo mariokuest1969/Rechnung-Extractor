@@ -48,3 +48,51 @@ export function exportInvoicesToXLSX(invoices: Invoice[]) {
   const filename = `rechnungen_export_${new Date().toISOString().split("T")[0]}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
+
+export function exportInvoicePositionsToXLSX(invoices: Invoice[]): number {
+  const rows = invoices.flatMap((invoice) =>
+    (invoice.positionen ?? []).map((position) => ({
+      Dateiname: invoice.dateiname ?? "",
+      Rechnungssteller: invoice.rechnungssteller ?? "",
+      Datum: invoice.datum ?? "",
+      Rechnungsnummer: invoice.rechnungsnummer ?? "",
+      Positionsnummer: position.positionsnummer ?? "",
+      Beschreibung: position.beschreibung,
+      Menge: position.menge ?? "",
+      Einheit: position.einheit ?? "",
+      Einzelpreis: position.einzelpreis ?? "",
+      "MwSt %": position.steuersatz ?? "",
+      Netto: position.nettobetrag ?? "",
+      Brutto: position.bruttobetrag ?? "",
+      Währung: invoice.waehrung ?? "EUR",
+    }))
+  );
+
+  if (rows.length === 0) return 0;
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws["!cols"] = [
+    { wch: 34 },
+    { wch: 28 },
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 16 },
+    { wch: 48 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 10 },
+  ];
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Rechnungspositionen");
+  XLSX.writeFile(
+    wb,
+    `rechnungspositionen_${new Date().toISOString().split("T")[0]}.xlsx`
+  );
+  return rows.length;
+}

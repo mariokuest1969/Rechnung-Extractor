@@ -203,6 +203,7 @@ export async function syncDropbox(): Promise<SyncResult> {
         nettoBetrag:      extracted.nettoBetrag   != null ? String(extracted.nettoBetrag)   : null,
         waehrung:         extracted.waehrung ?? "EUR",
         bemerkung:        extracted.bemerkung,
+        positionen:        extracted.positionen,
         dateiname:        file.name,
         dropboxFileId:    file.id,
       });

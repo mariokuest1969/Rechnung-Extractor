@@ -12,6 +12,18 @@ export interface ExtractedInvoice {
   nettoBetrag: number | null;
   waehrung: string | null;
   bemerkung: string | null;
+  positionen: InvoicePosition[];
+}
+
+export interface InvoicePosition {
+  positionsnummer: string | null;
+  beschreibung: string;
+  menge: number | null;
+  einheit: string | null;
+  einzelpreis: number | null;
+  steuersatz: number | null;
+  nettobetrag: number | null;
+  bruttobetrag: number | null;
 }
 
 function hasAiExtraction(): boolean {
@@ -213,8 +225,17 @@ Antworte NUR mit einem JSON-Objekt (kein Markdown, kein Text drumherum) mit dies
 - nettoBetrag: Nettobetrag als Zahl (number oder null)
 - waehrung: Währung z.B. "EUR" (string oder null)
 - bemerkung: Weitere relevante Hinweise (string oder null)
+- positionen: Array aller einzelnen Rechnungspositionen. Jede Position enthält:
+  - positionsnummer (string oder null)
+  - beschreibung (string, Pflichtfeld)
+  - menge (number oder null)
+  - einheit (string oder null)
+  - einzelpreis (number oder null)
+  - steuersatz (number oder null)
+  - nettobetrag (number oder null)
+  - bruttobetrag (number oder null)
 
-Verwende null wenn ein Wert nicht gefunden werden kann. Zahlen ohne Tausendertrennzeichen, Dezimaltrennzeichen ist Punkt.`;
+Verwende null wenn ein Wert nicht gefunden werden kann. Zahlen ohne Tausendertrennzeichen, Dezimaltrennzeichen ist Punkt. Wenn keine Rechnungspositionen erkennbar sind, verwende ein leeres Array.`;
 
   const response = await client.chat.completions.create({
     model: "gpt-4o-mini",
@@ -225,7 +246,26 @@ Verwende null wenn ein Wert nicht gefunden werden kann. Zahlen ohne Tausendertre
 
   const content = response.choices[0]?.message?.content ?? "{}";
   const cleaned = content.replace(/```json\n?|\n?```/g, "").trim();
-  return JSON.parse(cleaned) as ExtractedInvoice;
+  const parsed = JSON.parse(cleaned) as Partial<ExtractedInvoice>;
+  return {
+    rechnungssteller: parsed.rechnungssteller ?? null,
+    datum: parsed.datum ?? null,
+    rechnungsnummer: parsed.rechnungsnummer ?? null,
+    bruttoBetrag: parsed.bruttoBetrag ?? null,
+    steuersatz: parsed.steuersatz ?? null,
+    steuerBetrag: parsed.steuerBetrag ?? null,
+    nettoBetrag: parsed.nettoBetrag ?? null,
+    waehrung: parsed.waehrung ?? null,
+    bemerkung: parsed.bemerkung ?? null,
+    positionen: Array.isArray(parsed.positionen)
+      ? parsed.positionen.filter(
+          (position) =>
+            position &&
+            typeof position.beschreibung === "string" &&
+            position.beschreibung.trim().length > 0
+        )
+      : [],
+  };
 }
 
 function extractWithRegex(text: string): ExtractedInvoice {
@@ -239,6 +279,7 @@ function extractWithRegex(text: string): ExtractedInvoice {
     nettoBetrag: null,
     waehrung: "EUR",
     bemerkung: null,
+    positionen: [],
   };
 
   // Date patterns: DD.MM.YYYY, YYYY-MM-DD
@@ -355,6 +396,7 @@ export async function extractInvoiceFromPDF(
       nettoBetrag: null,
       waehrung: "EUR",
       bemerkung: `Kein Text extrahierbar aus ${filename}`,
+      positionen: [],
     };
   }
 

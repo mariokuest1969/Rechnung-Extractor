@@ -1,5 +1,24 @@
 import { Invoice } from "@workspace/api-client-react";
 
+function downloadCSV(headers: string[], rows: unknown[][], filename: string) {
+  const csvContent = [
+    headers.join(";"),
+    ...rows.map(row => row.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(";"))
+  ].join("\n");
+
+  const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export function exportInvoicesToCSV(invoices: Invoice[]) {
   const headers = [
     "Dateiname",
@@ -27,19 +46,52 @@ export function exportInvoicesToCSV(invoices: Invoice[]) {
     inv.bemerkung || ""
   ]);
 
-  const csvContent = [
-    headers.join(";"),
-    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(";"))
-  ].join("\n");
+  downloadCSV(
+    headers,
+    rows,
+    `rechnungen_export_${new Date().toISOString().split("T")[0]}.csv`
+  );
+}
 
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  
-  link.setAttribute("href", url);
-  link.setAttribute("download", `rechnungen_export_${new Date().toISOString().split("T")[0]}.csv`);
-  link.style.visibility = "hidden";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+export function exportInvoicePositionsToCSV(invoices: Invoice[]): number {
+  const rows = invoices.flatMap((invoice) =>
+    (invoice.positionen ?? []).map((position) => [
+      invoice.dateiname ?? "",
+      invoice.rechnungssteller ?? "",
+      invoice.datum ?? "",
+      invoice.rechnungsnummer ?? "",
+      position.positionsnummer ?? "",
+      position.beschreibung,
+      position.menge ?? "",
+      position.einheit ?? "",
+      position.einzelpreis ?? "",
+      position.steuersatz ?? "",
+      position.nettobetrag ?? "",
+      position.bruttobetrag ?? "",
+      invoice.waehrung ?? "EUR",
+    ])
+  );
+
+  if (rows.length === 0) return 0;
+
+  downloadCSV(
+    [
+      "Dateiname",
+      "Rechnungssteller",
+      "Datum",
+      "Rechnungsnummer",
+      "Positionsnummer",
+      "Beschreibung",
+      "Menge",
+      "Einheit",
+      "Einzelpreis",
+      "Steuersatz",
+      "Netto",
+      "Brutto",
+      "Währung",
+    ],
+    rows,
+    `rechnungspositionen_${new Date().toISOString().split("T")[0]}.csv`
+  );
+  return rows.length;
 }

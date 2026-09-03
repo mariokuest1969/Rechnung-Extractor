@@ -186,6 +186,16 @@ export const ListInvoicesResponseItem = zod.object({
   "buchungstext": zod.string().nullish(),
   "dateiname": zod.string().nullish(),
   "dropboxFileId": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional(),
   "createdAt": zod.string()
 })
 export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem)
@@ -233,6 +243,16 @@ export const UploadInvoicesResponseItem = zod.object({
   "buchungstext": zod.string().nullish(),
   "dateiname": zod.string().nullish(),
   "dropboxFileId": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional(),
   "createdAt": zod.string()
 })
 export const UploadInvoicesResponse = zod.array(UploadInvoicesResponseItem)
@@ -252,7 +272,17 @@ export const ExtractPreviewResponseItem = zod.object({
   "steuerBetrag": zod.number().nullish(),
   "nettoBetrag": zod.number().nullish(),
   "waehrung": zod.string().nullish(),
-  "bemerkung": zod.string().nullish()
+  "bemerkung": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional()
 })
 export const ExtractPreviewResponse = zod.array(ExtractPreviewResponseItem)
 
@@ -298,6 +328,16 @@ export const ReextractInvoiceResponse = zod.object({
   "buchungstext": zod.string().nullish(),
   "dateiname": zod.string().nullish(),
   "dropboxFileId": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional(),
   "createdAt": zod.string()
 })
 
@@ -376,6 +416,16 @@ export const GetInvoiceResponse = zod.object({
   "buchungstext": zod.string().nullish(),
   "dateiname": zod.string().nullish(),
   "dropboxFileId": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional(),
   "createdAt": zod.string()
 })
 
@@ -430,6 +480,16 @@ export const UpdateInvoiceResponse = zod.object({
   "buchungstext": zod.string().nullish(),
   "dateiname": zod.string().nullish(),
   "dropboxFileId": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional(),
   "createdAt": zod.string()
 })
 

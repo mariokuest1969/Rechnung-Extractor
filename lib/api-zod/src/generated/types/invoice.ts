@@ -5,6 +5,7 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoicePosition } from './invoicePosition';
 
 export interface Invoice {
   id: number;
@@ -48,5 +49,6 @@ export interface Invoice {
   dateiname?: string | null;
   /** @nullable */
   dropboxFileId?: string | null;
+  positionen?: InvoicePosition[];
   createdAt: string;
 }

@@ -5,6 +5,7 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoicePosition } from './invoicePosition';
 
 export interface InvoicePreview {
   dateiname: string;
@@ -26,4 +27,5 @@ export interface InvoicePreview {
   waehrung?: string | null;
   /** @nullable */
   bemerkung?: string | null;
+  positionen?: InvoicePosition[];
 }

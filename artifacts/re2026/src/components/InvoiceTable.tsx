@@ -67,8 +67,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { exportInvoicesToCSV } from "@/lib/csv";
-import { exportInvoicesToXLSX } from "@/lib/xlsx-export";
+import { exportInvoicePositionsToCSV, exportInvoicesToCSV } from "@/lib/csv";
+import { exportInvoicePositionsToXLSX, exportInvoicesToXLSX } from "@/lib/xlsx-export";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Column definitions
@@ -682,6 +682,26 @@ export function InvoiceTable() {
   }
 
   const selectedIds = Array.from(selected);
+  const exportInvoices =
+    selectedIds.length > 0
+      ? invoices.filter((invoice) => selected.has(invoice.id))
+      : invoices;
+
+  const exportPositions = (format: "csv" | "xlsx") => {
+    const count =
+      format === "csv"
+        ? exportInvoicePositionsToCSV(exportInvoices)
+        : exportInvoicePositionsToXLSX(exportInvoices);
+    if (count === 0) {
+      toast.info(
+        "Noch keine Rechnungspositionen vorhanden. Bitte die gewünschten Dropbox-Rechnungen zuerst neu auslesen."
+      );
+      return;
+    }
+    toast.success(
+      `${count} Rechnungsposition${count !== 1 ? "en" : ""} exportiert`
+    );
+  };
 
   const sortHeaderProps = { sortField, sortDir, onSort: toggleSort };
 
@@ -717,6 +737,12 @@ export function InvoiceTable() {
             </Button>
             <Button variant="outline" size="sm" onClick={() => exportInvoicesToXLSX(invoices)}>
               Excel Export
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => exportPositions("csv")}>
+              Positionen CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => exportPositions("xlsx")}>
+              Positionen Excel
             </Button>
 
             {/* ── Column picker ─────────────────────────────────────────── */}

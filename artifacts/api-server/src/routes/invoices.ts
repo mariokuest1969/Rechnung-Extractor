@@ -47,6 +47,7 @@ function toApiInvoice(row: typeof invoicesTable.$inferSelect) {
     buchungstext: row.buchungstext ?? null,
     dateiname: row.dateiname ?? null,
     dropboxFileId: row.dropboxFileId ?? null,
+    positionen: row.positionen ?? [],
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -101,6 +102,7 @@ router.post("/invoices/upload", upload.array("files"), async (req, res): Promise
         nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : null,
         waehrung: extracted.waehrung ?? "EUR",
         bemerkung: extracted.bemerkung,
+        positionen: extracted.positionen,
         dateiname: file.originalname,
       }).returning();
       created.push(toApiInvoice(row));
@@ -122,7 +124,7 @@ router.post("/invoices/extract-preview", upload.array("files"), async (req, res)
       previews.push({ dateiname: file.originalname, ...extracted });
     } catch (err) {
       req.log.error({ err, filename: file.originalname }, "Preview extraction failed");
-      previews.push({ dateiname: file.originalname, rechnungssteller: null, datum: null, rechnungsnummer: null, bruttoBetrag: null, steuersatz: null, steuerBetrag: null, nettoBetrag: null, waehrung: "EUR", bemerkung: null });
+      previews.push({ dateiname: file.originalname, rechnungssteller: null, datum: null, rechnungsnummer: null, bruttoBetrag: null, steuersatz: null, steuerBetrag: null, nettoBetrag: null, waehrung: "EUR", bemerkung: null, positionen: [] });
     }
   }
   res.json(previews);
@@ -144,6 +146,7 @@ router.post("/invoices/upload-confirmed", async (req, res): Promise<void> => {
       nettoBetrag: item.nettoBetrag != null ? String(item.nettoBetrag) : null,
       waehrung: (item.waehrung as string) ?? "EUR",
       bemerkung: (item.bemerkung as string) ?? null,
+      positionen: Array.isArray(item.positionen) ? item.positionen : [],
       dateiname: (item.dateiname as string) ?? null,
     }).returning();
     if (row) created.push(toApiInvoice(row));
@@ -275,6 +278,7 @@ router.post("/invoices/:id/reextract", async (req, res): Promise<void> => {
       nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : inv.nettoBetrag,
       waehrung: extracted.waehrung ?? inv.waehrung,
       bemerkung: extracted.bemerkung ?? inv.bemerkung,
+      positionen: extracted.positionen,
     }).where(eq(invoicesTable.id, id)).returning();
     res.json(toApiInvoice(updated!));
   } catch (err) {

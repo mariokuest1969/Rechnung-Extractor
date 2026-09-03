@@ -1,6 +1,17 @@
-import { pgTable, serial, text, numeric, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+export interface InvoiceLinePosition {
+  positionsnummer: string | null;
+  beschreibung: string;
+  menge: number | null;
+  einheit: string | null;
+  einzelpreis: number | null;
+  steuersatz: number | null;
+  nettobetrag: number | null;
+  bruttobetrag: number | null;
+}
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
@@ -24,6 +35,7 @@ export const invoicesTable = pgTable("invoices", {
   buchungstext: text("buchungstext"),
   dateiname: text("dateiname"),
   dropboxFileId: text("dropbox_file_id").unique(),
+  positionen: jsonb("positionen").$type<InvoiceLinePosition[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

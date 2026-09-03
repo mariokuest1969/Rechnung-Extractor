@@ -664,8 +664,34 @@ components:
           type: ["string", "null"]
         dropboxFileId:
           type: ["string", "null"]
+        positionen:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoicePosition"
         createdAt:
           type: string
+
+    InvoicePosition:
+      type: object
+      required:
+        - beschreibung
+      properties:
+        positionsnummer:
+          type: ["string", "null"]
+        beschreibung:
+          type: string
+        menge:
+          type: ["number", "null"]
+        einheit:
+          type: ["string", "null"]
+        einzelpreis:
+          type: ["number", "null"]
+        steuersatz:
+          type: ["number", "null"]
+        nettobetrag:
+          type: ["number", "null"]
+        bruttobetrag:
+          type: ["number", "null"]
 
     InvoiceUpdate:
       type: object
@@ -740,6 +766,10 @@ components:
           type: ["string", "null"]
         bemerkung:
           type: ["string", "null"]
+        positionen:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoicePosition"
 
     BulkUpdateBody:
       type: object
