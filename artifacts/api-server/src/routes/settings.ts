@@ -7,7 +7,13 @@ const router: IRouter = Router();
 
 const SETTING_DROPBOX_FOLDER = "dropbox_folder";
 const SETTING_DROPBOX_TOKEN  = "dropbox_token";
-const DEFAULT_DROPBOX_FOLDER = "/Apps/roc.Kasse/RE-2026";
+const DEFAULT_DROPBOX_FOLDER = "/Apps/Lake Mail/apps/Roc.Kasse/Lake-Male/2026";
+const LEGACY_DROPBOX_FOLDER = "/Apps/Lake Mail/apps/Roc.Kasse/Lake-Male";
+
+function normalizeDropboxFolder(folder: string): string {
+  const trimmed = folder.trim();
+  return trimmed === "/" ? "" : trimmed.replace(/\/+$/, "");
+}
 
 async function getSetting(key: string, defaultValue = ""): Promise<string> {
   const [row] = await db
@@ -29,7 +35,12 @@ async function upsertSetting(key: string, value: string): Promise<void> {
 }
 
 export async function getDropboxFolder(): Promise<string> {
-  return getSetting(SETTING_DROPBOX_FOLDER, DEFAULT_DROPBOX_FOLDER);
+  const folder = normalizeDropboxFolder(
+    await getSetting(SETTING_DROPBOX_FOLDER, DEFAULT_DROPBOX_FOLDER)
+  );
+  return folder.toLowerCase() === LEGACY_DROPBOX_FOLDER.toLowerCase()
+    ? DEFAULT_DROPBOX_FOLDER
+    : folder;
 }
 
 export async function getDropboxToken(): Promise<string | null> {
@@ -39,7 +50,7 @@ export async function getDropboxToken(): Promise<string | null> {
 
 // GET /settings
 router.get("/settings", async (_req, res): Promise<void> => {
-  const dropboxFolder = await getSetting(SETTING_DROPBOX_FOLDER, DEFAULT_DROPBOX_FOLDER);
+  const dropboxFolder = await getDropboxFolder();
   const dropboxToken  = await getSetting(SETTING_DROPBOX_TOKEN);
   res.json({ dropboxFolder, dropboxTokenConfigured: dropboxToken.length > 0 });
 });
@@ -56,8 +67,12 @@ router.patch("/settings", async (req, res): Promise<void> => {
       res.status(400).json({ error: "dropboxFolder muss ein gültiger Pfad sein" });
       return;
     }
-    await upsertSetting(SETTING_DROPBOX_FOLDER, dropboxFolder.trim());
-    logger.info({ dropboxFolder: dropboxFolder.trim() }, "Settings updated: dropbox folder");
+    const normalizedFolder = normalizeDropboxFolder(dropboxFolder);
+    await upsertSetting(SETTING_DROPBOX_FOLDER, normalizedFolder);
+    logger.info(
+      { dropboxFolder: normalizedFolder },
+      "Settings updated: dropbox folder"
+    );
   }
 
   if (dropboxToken !== undefined) {
