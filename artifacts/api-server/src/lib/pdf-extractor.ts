@@ -112,11 +112,33 @@ interface PageExtractionDependencies {
   recognizeScannedImage: RecognizeScannedImage;
 }
 
+interface ChatCompletionRequest {
+  model: string;
+  messages: Array<{ role: "user"; content: string }>;
+  max_tokens: number;
+  temperature: number;
+}
+
+interface InvoiceExtractionDependencies extends PageExtractionDependencies {
+  isAiExtractionAvailable: () => boolean;
+  createStructuredCompletion: (
+    request: ChatCompletionRequest
+  ) => Promise<string>;
+}
+
 const defaultPageExtractionDependencies: PageExtractionDependencies = {
   isOcrAvailable: hasAiExtraction,
   recognizeScannedImage,
 };
 
+const defaultInvoiceExtractionDependencies: InvoiceExtractionDependencies = {
+  ...defaultPageExtractionDependencies,
+  isAiExtractionAvailable: hasAiExtraction,
+  createStructuredCompletion: async (request) => {
+    const response = await createOpenAIClient().chat.completions.create(request);
+    return response.choices[0]?.message?.content ?? "{}";
+  },
+};
 export async function extractPages(
   buffer: Buffer,
   filename: string,
@@ -205,10 +227,10 @@ function prepareTextForAI(text: string): string {
 
 async function extractWithAI(
   text: string,
-  pageCount: number
+  pageCount: number,
+  createStructuredCompletion:
+    InvoiceExtractionDependencies["createStructuredCompletion"]
 ): Promise<ExtractedInvoice> {
-  const client = createOpenAIClient();
-
   const preparedText = prepareTextForAI(text);
   const prompt = `Du bist ein Experte für die Analyse von Rechnungen. Das Dokument hat ${pageCount} Seite${pageCount === 1 ? "" : "n"}. Berücksichtige ausdrücklich den Inhalt ALLER Seiten und extrahiere aus dem gesamten Rechnungstext die strukturierten Daten.
 
@@ -237,14 +259,13 @@ Antworte NUR mit einem JSON-Objekt (kein Markdown, kein Text drumherum) mit dies
 
 Verwende null wenn ein Wert nicht gefunden werden kann. Zahlen ohne Tausendertrennzeichen, Dezimaltrennzeichen ist Punkt. Wenn keine Rechnungspositionen erkennbar sind, verwende ein leeres Array.`;
 
-  const response = await client.chat.completions.create({
+  const content = await createStructuredCompletion({
     model: "gpt-4o-mini",
     messages: [{ role: "user", content: prompt }],
     max_tokens: 512,
     temperature: 0,
   });
 
-  const content = response.choices[0]?.message?.content ?? "{}";
   const cleaned = content.replace(/```json\n?|\n?```/g, "").trim();
   const parsed = JSON.parse(cleaned) as Partial<ExtractedInvoice>;
   return {
@@ -369,12 +390,13 @@ function extractWithRegex(text: string): ExtractedInvoice {
 
 export async function extractInvoiceFromPDF(
   buffer: Buffer,
-  filename: string
+  filename: string,
+  dependencies: InvoiceExtractionDependencies = defaultInvoiceExtractionDependencies
 ): Promise<ExtractedInvoice> {
   let text = "";
   let pageCount = 0;
   try {
-    const parsed = await extractPages(buffer, filename);
+    const parsed = await extractPages(buffer, filename, dependencies);
     text = parsed.text;
     pageCount = parsed.pageCount;
     logger.info(
@@ -400,10 +422,14 @@ export async function extractInvoiceFromPDF(
     };
   }
 
-  if (hasAiExtraction()) {
+  if (dependencies.isAiExtractionAvailable()) {
     try {
       logger.info({ filename, pageCount }, "Extracting invoice with Replit AI");
-      return await extractWithAI(text, pageCount);
+      return await extractWithAI(
+        text,
+        pageCount,
+        dependencies.createStructuredCompletion
+      );
     } catch (err) {
       logger.warn(
         { err, filename },
