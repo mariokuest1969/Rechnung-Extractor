@@ -21,6 +21,32 @@ export interface AppSettingsUpdate {
   dropboxToken?: string | null;
 }
 
+export type DropboxConnectionStatusState = typeof DropboxConnectionStatusState[keyof typeof DropboxConnectionStatusState];
+
+
+export const DropboxConnectionStatusState = {
+  connected: 'connected',
+  disconnected: 'disconnected',
+  wrong_folder: 'wrong_folder',
+  error: 'error',
+} as const;
+
+export type DropboxConnectionStatusConnectionMethod = typeof DropboxConnectionStatusConnectionMethod[keyof typeof DropboxConnectionStatusConnectionMethod];
+
+
+export const DropboxConnectionStatusConnectionMethod = {
+  replit_connector: 'replit_connector',
+  personal_token: 'personal_token',
+} as const;
+
+export interface DropboxConnectionStatus {
+  state: DropboxConnectionStatusState;
+  message: string;
+  folder: string;
+  connectionMethod: DropboxConnectionStatusConnectionMethod;
+  checkedAt: string;
+}
+
 export interface DropboxCleanupResult {
   removed: number;
   checked: number;

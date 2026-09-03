@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
+import { ReplitConnectors } from "@replit/connectors-sdk";
+import { GetDropboxStatusResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -88,6 +90,87 @@ router.patch("/settings", async (req, res): Promise<void> => {
   const updatedFolder = await getSetting(SETTING_DROPBOX_FOLDER, DEFAULT_DROPBOX_FOLDER);
   const updatedToken  = await getSetting(SETTING_DROPBOX_TOKEN);
   res.json({ dropboxFolder: updatedFolder, dropboxTokenConfigured: updatedToken.length > 0 });
+});
+
+// GET /settings/dropbox-status
+router.get("/settings/dropbox-status", async (_req, res): Promise<void> => {
+  const folder = await getDropboxFolder();
+  const token = await getDropboxToken();
+  const connectionMethod = token ? "personal_token" : "replit_connector";
+  const checkedAt = new Date().toISOString();
+
+  try {
+    const body = JSON.stringify({ path: folder, recursive: false, limit: 1 });
+    const response = token
+      ? await fetch("https://api.dropboxapi.com/2/files/list_folder", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body,
+        })
+      : await new ReplitConnectors().proxy(
+          "dropbox",
+          "/2/files/list_folder",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          }
+        );
+
+    if (response.ok) {
+      res.json(
+        GetDropboxStatusResponse.parse({
+          state: "connected",
+          message: "Dropbox ist verbunden und der Zielordner ist erreichbar.",
+          folder,
+          connectionMethod,
+          checkedAt,
+        })
+      );
+      return;
+    }
+
+    const state =
+      response.status === 401
+        ? "disconnected"
+        : response.status === 409
+          ? "wrong_folder"
+          : "error";
+    const message =
+      state === "disconnected"
+        ? "Die Dropbox-Anmeldung ist abgelaufen oder wurde widerrufen."
+        : state === "wrong_folder"
+          ? "Dropbox ist verbunden, aber der eingestellte Zielordner wurde nicht gefunden."
+          : `Dropbox konnte nicht geprüft werden (Status ${response.status}).`;
+
+    logger.warn(
+      { status: response.status, state, folder },
+      "Dropbox connection check failed"
+    );
+    res.json(
+      GetDropboxStatusResponse.parse({
+        state,
+        message,
+        folder,
+        connectionMethod,
+        checkedAt,
+      })
+    );
+  } catch (err) {
+    logger.warn({ err, folder }, "Dropbox connection check errored");
+    res.json(
+      GetDropboxStatusResponse.parse({
+        state: "error",
+        message: "Dropbox konnte momentan nicht erreicht werden.",
+        folder,
+        connectionMethod,
+        checkedAt,
+      })
+    );
+  }
 });
 
 export default router;

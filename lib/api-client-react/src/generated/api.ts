@@ -27,6 +27,7 @@ import type {
   BulkUpdateBody,
   BulkUpdateResult,
   DropboxCleanupResult,
+  DropboxConnectionStatus,
   DropboxLinkResponse,
   DropboxSyncResult,
   ErrorResponse,
@@ -289,6 +290,83 @@ export const useUpdateSettings = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getUpdateSettingsMutationOptions(options));
     }
+
+export const getGetDropboxStatusUrl = () => {
+
+
+
+
+  return `/api/settings/dropbox-status`
+}
+
+/**
+ * @summary Check the live Dropbox connection and configured folder
+ */
+export const getDropboxStatus = async ( options?: RequestInit): Promise<DropboxConnectionStatus> => {
+
+  return customFetch<DropboxConnectionStatus>(getGetDropboxStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDropboxStatusQueryKey = () => {
+    return [
+    `/api/settings/dropbox-status`
+    ] as const;
+    }
+
+
+export const getGetDropboxStatusQueryOptions = <TData = Awaited<ReturnType<typeof getDropboxStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDropboxStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDropboxStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDropboxStatus>>> = ({ signal }) => getDropboxStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDropboxStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDropboxStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getDropboxStatus>>>
+export type GetDropboxStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check the live Dropbox connection and configured folder
+ */
+
+export function useGetDropboxStatus<TData = Awaited<ReturnType<typeof getDropboxStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDropboxStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDropboxStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListLieferantenUrl = () => {
 

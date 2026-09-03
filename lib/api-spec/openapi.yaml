@@ -68,6 +68,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /settings/dropbox-status:
+    get:
+      operationId: getDropboxStatus
+      tags: [settings]
+      summary: Check the live Dropbox connection and configured folder
+      responses:
+        "200":
+          description: Dropbox connection status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DropboxConnectionStatus"
+
   /lieferanten:
     get:
       operationId: listLieferanten
@@ -546,6 +559,28 @@ components:
           type: string
         dropboxToken:
           type: ["string", "null"]
+
+    DropboxConnectionStatus:
+      type: object
+      required:
+        - state
+        - message
+        - folder
+        - connectionMethod
+        - checkedAt
+      properties:
+        state:
+          type: string
+          enum: [connected, disconnected, wrong_folder, error]
+        message:
+          type: string
+        folder:
+          type: string
+        connectionMethod:
+          type: string
+          enum: [replit_connector, personal_token]
+        checkedAt:
+          type: string
 
     DropboxCleanupResult:
       type: object

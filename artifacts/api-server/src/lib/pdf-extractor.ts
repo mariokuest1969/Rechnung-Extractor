@@ -115,6 +115,7 @@ interface PageExtractionDependencies {
 interface ChatCompletionRequest {
   model: string;
   messages: Array<{ role: "user"; content: string }>;
+  response_format?: { type: "json_object" };
   max_tokens: number;
   temperature: number;
 }
@@ -262,7 +263,8 @@ Verwende null wenn ein Wert nicht gefunden werden kann. Zahlen ohne Tausendertre
   const content = await createStructuredCompletion({
     model: "gpt-4o-mini",
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 512,
+    response_format: { type: "json_object" },
+    max_tokens: 4096,
     temperature: 0,
   });
 

@@ -718,6 +718,10 @@ export function InvoiceTable() {
           method: "POST",
         });
         if (!response.ok) throw new Error(await response.text());
+        const updated = (await response.json()) as Invoice;
+        if ((updated.positionen?.length ?? 0) === 0) {
+          throw new Error("Keine Rechnungspositionen erkannt");
+        }
         succeeded += 1;
       } catch {
         failed += 1;

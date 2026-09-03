@@ -60,6 +60,8 @@ test("continues with later pages when OCR fails on one page", async () => {
 
 test("passes text from early and late PDF pages to structured extraction", async () => {
   let structuredPrompt = "";
+  let structuredMaxTokens: number | undefined;
+  let structuredResponseFormat: string | undefined;
   const expectedInvoice = {
     rechnungssteller: "Muster GmbH",
     datum: "2026-09-03",
@@ -85,6 +87,9 @@ test("passes text from early and late PDF pages to structured extraction", async
       isAiExtractionAvailable: () => true,
       createStructuredCompletion: async (request) => {
         structuredPrompt = request.messages[0]?.content ?? "";
+        structuredMaxTokens = request.max_tokens ?? undefined;
+        structuredResponseFormat =
+          request.response_format?.type ?? undefined;
         return JSON.stringify(expectedInvoice);
       },
     }
@@ -95,6 +100,8 @@ test("passes text from early and late PDF pages to structured extraction", async
     structuredPrompt,
     /\[Seite 3, OCR\]\s+LETZTE SEITE Gesamtbetrag: 119,00 EUR/
   );
+  assert.equal(structuredMaxTokens, 4096);
+  assert.equal(structuredResponseFormat, "json_object");
   assert.deepEqual(result, expectedInvoice);
 });
 

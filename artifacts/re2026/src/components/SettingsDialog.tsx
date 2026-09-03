@@ -1,8 +1,21 @@
 import { useState, useEffect } from "react";
-import { useGetSettings, useUpdateSettings } from "@workspace/api-client-react";
+import {
+  getGetDropboxStatusQueryKey,
+  useGetDropboxStatus,
+  useGetSettings,
+  useUpdateSettings,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Settings2, Loader2, FolderOpen, KeyRound, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import {
+  Settings2,
+  Loader2,
+  FolderOpen,
+  CheckCircle2,
+  CircleAlert,
+  RefreshCw,
+  ExternalLink,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,16 +32,23 @@ import { Label } from "@/components/ui/label";
 export function SettingsDialog() {
   const [open, setOpen]             = useState(false);
   const [folder, setFolder]         = useState("");
-  const [token, setToken]           = useState("");
-  const [showToken, setShowToken]   = useState(false);
   const queryClient = useQueryClient();
 
   const { data: settings, isLoading } = useGetSettings();
+  const {
+    data: dropboxStatus,
+    isLoading: isStatusLoading,
+    isFetching: isStatusFetching,
+  } = useGetDropboxStatus({
+    query: {
+      queryKey: getGetDropboxStatusQueryKey(),
+      retry: false,
+      refetchInterval: 60_000,
+    },
+  });
 
   useEffect(() => {
     if (settings?.dropboxFolder) setFolder(settings.dropboxFolder);
-    // Token is write-only from the UI — we never display the actual value
-    setToken("");
   }, [settings?.dropboxFolder]);
 
   const updateMutation = useUpdateSettings({
@@ -36,9 +56,9 @@ export function SettingsDialog() {
       onSuccess: () => {
         toast.success("Einstellungen gespeichert");
         queryClient.invalidateQueries({ queryKey: ["getSettings"] });
-        setToken("");
-        setShowToken(false);
-        setOpen(false);
+        queryClient.invalidateQueries({
+          queryKey: getGetDropboxStatusQueryKey(),
+        });
       },
       onError: () => toast.error("Fehler beim Speichern"),
     },
@@ -50,34 +70,94 @@ export function SettingsDialog() {
       toast.error("Bitte einen gültigen Dropbox-Pfad eingeben");
       return;
     }
-    const payload: { dropboxFolder: string; dropboxToken?: string | null } = {
-      dropboxFolder: trimmedFolder,
-    };
-    // Only send token if the field was touched
-    if (token !== "") {
-      payload.dropboxToken = token.trim() || null;
-    }
-    updateMutation.mutate({ data: payload });
+    updateMutation.mutate({ data: { dropboxFolder: trimmedFolder } });
   };
 
-  const tokenConfigured = settings?.dropboxTokenConfigured ?? false;
+  const isConnected = dropboxStatus?.state === "connected";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-9 w-9" title="Einstellungen">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-9 w-9"
+          title={
+            isConnected
+              ? "Einstellungen – Dropbox verbunden"
+              : "Einstellungen – Dropbox prüfen"
+          }
+        >
           <Settings2 className="h-4 w-4" />
+          {dropboxStatus && (
+            <span
+              className={`absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-background ${
+                isConnected ? "bg-emerald-500" : "bg-amber-500"
+              }`}
+            />
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Einstellungen</DialogTitle>
           <DialogDescription>
-            Dropbox-Ordner und optionaler API-Token für die Rechnungserfassung.
+            Dropbox-Verbindung und Zielordner für die Rechnungserfassung.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
+          <div
+            className={`rounded-lg border p-3 ${
+              isConnected
+                ? "border-emerald-200 bg-emerald-50"
+                : "border-amber-200 bg-amber-50"
+            }`}
+          >
+            <div className="flex items-start gap-2.5">
+              {isStatusLoading || isStatusFetching ? (
+                <Loader2 className="mt-0.5 h-4 w-4 animate-spin text-muted-foreground" />
+              ) : isConnected ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-700" />
+              ) : (
+                <CircleAlert className="mt-0.5 h-4 w-4 text-amber-700" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">
+                  {isStatusLoading
+                    ? "Dropbox wird geprüft…"
+                    : isConnected
+                      ? "Dropbox verbunden"
+                      : "Dropbox-Verbindung prüfen"}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {dropboxStatus?.message ??
+                    "Der aktuelle Verbindungsstatus wird geladen."}
+                </p>
+                {dropboxStatus && (
+                  <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                    {dropboxStatus.folder}
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                title="Verbindung erneut prüfen"
+                disabled={isStatusFetching}
+                onClick={() =>
+                  queryClient.invalidateQueries({
+                    queryKey: getGetDropboxStatusQueryKey(),
+                  })
+                }
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${isStatusFetching ? "animate-spin" : ""}`}
+                />
+              </Button>
+            </div>
+          </div>
 
           {/* Dropbox folder */}
           <div className="space-y-2">
@@ -105,56 +185,30 @@ export function SettingsDialog() {
             </p>
           </div>
 
-          {/* Dropbox API token */}
-          <div className="space-y-2">
-            <Label htmlFor="dropbox-token" className="flex items-center gap-1.5">
-              <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-              Dropbox API-Token
-              {tokenConfigured && (
-                <span className="ml-auto flex items-center gap-1 text-xs text-emerald-600 font-normal">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Konfiguriert
-                </span>
-              )}
-            </Label>
-            <div className="relative">
-              <Input
-                id="dropbox-token"
-                type={showToken ? "text" : "password"}
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder={tokenConfigured ? "Neuen Token eingeben zum Überschreiben" : "sl.xxxxxxxxxxxxxxxx…"}
-                className="font-mono text-sm pr-9"
-                autoComplete="off"
-                onKeyDown={(e) => e.key === "Enter" && handleSave()}
-              />
-              <button
-                type="button"
-                onClick={() => setShowToken((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                tabIndex={-1}
-              >
-                {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Persönlicher Dropbox-Token aus{" "}
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <p className="text-sm font-medium">Dropbox neu verbinden</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Öffnen Sie im Replit-Projekt den Bereich „Connectors“, wählen Sie
+              Dropbox und anschließend „Reconnect“. Anmeldung und Passwort
+              werden ausschließlich auf der sicheren Dropbox-Seite eingegeben
+              und niemals in RE2026 gespeichert.
+            </p>
+            <Button variant="link" size="sm" className="mt-1 h-auto px-0" asChild>
               <a
-                href="https://www.dropbox.com/developers/apps"
+                href="https://docs.replit.com/replitai/managing-connectors"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="underline hover:text-foreground"
               >
-                dropbox.com/developers/apps
+                Anleitung zum Neuverbinden
+                <ExternalLink className="ml-1 h-3.5 w-3.5" />
               </a>
-              . Leer lassen, um den bestehenden Token beizubehalten. Leerzeichen eingeben + Speichern, um ihn zu löschen.
-            </p>
+            </Button>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => { setOpen(false); setToken(""); setShowToken(false); }}>
-            Abbrechen
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Schließen
           </Button>
           <Button
             onClick={handleSave}

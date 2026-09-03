@@ -278,7 +278,10 @@ router.post("/invoices/:id/reextract", async (req, res): Promise<void> => {
       nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : inv.nettoBetrag,
       waehrung: extracted.waehrung ?? inv.waehrung,
       bemerkung: extracted.bemerkung ?? inv.bemerkung,
-      positionen: extracted.positionen,
+      positionen:
+        extracted.positionen.length > 0
+          ? extracted.positionen
+          : inv.positionen,
     }).where(eq(invoicesTable.id, id)).returning();
     res.json(toApiInvoice(updated!));
   } catch (err) {

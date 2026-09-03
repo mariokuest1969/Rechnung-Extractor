@@ -41,6 +41,18 @@ export const UpdateSettingsResponse = zod.object({
 
 
 /**
+ * @summary Check the live Dropbox connection and configured folder
+ */
+export const GetDropboxStatusResponse = zod.object({
+  "state": zod.enum(['connected', 'disconnected', 'wrong_folder', 'error']),
+  "message": zod.string(),
+  "folder": zod.string(),
+  "connectionMethod": zod.enum(['replit_connector', 'personal_token']),
+  "checkedAt": zod.string()
+})
+
+
+/**
  * @summary List all suppliers
  */
 export const ListLieferantenResponseItem = zod.object({
