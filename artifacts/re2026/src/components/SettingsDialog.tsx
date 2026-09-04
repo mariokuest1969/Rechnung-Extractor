@@ -15,6 +15,9 @@ import {
   CircleAlert,
   RefreshCw,
   ExternalLink,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +35,8 @@ import { Label } from "@/components/ui/label";
 export function SettingsDialog() {
   const [open, setOpen]             = useState(false);
   const [folder, setFolder]         = useState("");
+  const [token, setToken]           = useState("");
+  const [showToken, setShowToken]   = useState(false);
   const queryClient = useQueryClient();
 
   const { data: settings, isLoading } = useGetSettings();
@@ -59,6 +64,8 @@ export function SettingsDialog() {
         queryClient.invalidateQueries({
           queryKey: getGetDropboxStatusQueryKey(),
         });
+        setToken("");
+        setShowToken(false);
       },
       onError: () => toast.error("Fehler beim Speichern"),
     },
@@ -70,10 +77,17 @@ export function SettingsDialog() {
       toast.error("Bitte einen gültigen Dropbox-Pfad eingeben");
       return;
     }
-    updateMutation.mutate({ data: { dropboxFolder: trimmedFolder } });
+    const payload: { dropboxFolder: string; dropboxToken?: string | null } = {
+      dropboxFolder: trimmedFolder,
+    };
+    if (token !== "") {
+      payload.dropboxToken = token.trim() || null;
+    }
+    updateMutation.mutate({ data: payload });
   };
 
   const isConnected = dropboxStatus?.state === "connected";
+  const tokenConfigured = settings?.dropboxTokenConfigured ?? false;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -185,6 +199,55 @@ export function SettingsDialog() {
             </p>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="dropbox-token" className="flex items-center gap-1.5">
+              <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+              Dropbox Access Token
+              {tokenConfigured && (
+                <span className="ml-auto flex items-center gap-1 text-xs font-normal text-emerald-700">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Hinterlegt
+                </span>
+              )}
+            </Label>
+            <div className="relative">
+              <Input
+                id="dropbox-token"
+                type={showToken ? "text" : "password"}
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder={
+                  tokenConfigured
+                    ? "Neuen Token zum Ersetzen eingeben"
+                    : "Access Token eingeben"
+                }
+                className="pr-9 font-mono text-sm"
+                autoComplete="off"
+                spellCheck={false}
+                onKeyDown={(event) =>
+                  event.key === "Enter" && handleSave()
+                }
+              />
+              <button
+                type="button"
+                onClick={() => setShowToken((value) => !value)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                title={showToken ? "Token ausblenden" : "Token anzeigen"}
+              >
+                {showToken ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Verwenden Sie den generierten Access Token Ihrer Dropbox-App.
+              Der App Key allein kann nicht für Dateiabrufe verwendet werden.
+              Leer lassen, um den hinterlegten Token beizubehalten.
+            </p>
+          </div>
+
           <div className="rounded-lg border border-border bg-muted/30 p-3">
             <p className="text-sm font-medium">Dropbox neu verbinden</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -207,7 +270,14 @@ export function SettingsDialog() {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setOpen(false);
+              setToken("");
+              setShowToken(false);
+            }}
+          >
             Schließen
           </Button>
           <Button
