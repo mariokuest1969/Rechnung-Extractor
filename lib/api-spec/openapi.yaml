@@ -364,7 +364,7 @@ paths:
     post:
       operationId: reextractInvoice
       tags: [invoices]
-      summary: Re-extract invoice data from Dropbox PDF
+      summary: Start re-extracting invoice data from Dropbox PDF
       parameters:
         - name: id
           in: path
@@ -372,20 +372,38 @@ paths:
           schema:
             type: integer
       responses:
-        "200":
-          description: Updated invoice
+        "202":
+          description: Re-extraction job started
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Invoice"
+                $ref: "#/components/schemas/ReextractJobStarted"
         "400":
           description: No Dropbox file associated
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /invoices/reextract-jobs/{jobId}:
+    get:
+      operationId: getReextractJob
+      tags: [invoices]
+      summary: Get the current re-extraction job result
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current re-extraction job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReextractJobStatus"
         "404":
-          description: Not found
+          description: Job not found
           content:
             application/json:
               schema:
@@ -904,6 +922,60 @@ components:
           type: integer
         folder:
           type: string
+
+    ReextractJobStarted:
+      type: object
+      required:
+        - jobId
+        - status
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [processing]
+
+    ReextractJobStatus:
+      oneOf:
+        - type: object
+          required:
+            - status
+            - createdAt
+          properties:
+            status:
+              type: string
+              enum: [processing]
+            createdAt:
+              type: integer
+        - type: object
+          required:
+            - status
+            - createdAt
+            - invoice
+            - extractedPositionCount
+          properties:
+            status:
+              type: string
+              enum: [success]
+            createdAt:
+              type: integer
+            invoice:
+              $ref: "#/components/schemas/Invoice"
+            extractedPositionCount:
+              type: integer
+        - type: object
+          required:
+            - status
+            - createdAt
+            - error
+          properties:
+            status:
+              type: string
+              enum: [error]
+            createdAt:
+              type: integer
+            error:
+              type: string
 
     ErrorResponse:
       type: object

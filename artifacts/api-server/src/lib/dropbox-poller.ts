@@ -11,6 +11,19 @@ import { logger } from "./logger";
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_FILES_PER_SYNC = 100;
 
+async function waitWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  signal.throwIfAborted();
+
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", abort);
+    });
+  });
+}
+
 interface DropboxEntry {
   ".tag": string;
   name: string;
@@ -95,7 +108,8 @@ async function listDropboxPDFs(
 // ── Download a Dropbox file by path ──────────────────────────────────────────
 export async function downloadDropboxFile(
   pathDisplay: string,
-  token?: string | null
+  token?: string | null,
+  signal?: AbortSignal
 ): Promise<Buffer> {
   const resolvedToken = token !== undefined ? token : await getDropboxToken();
 
@@ -103,6 +117,7 @@ export async function downloadDropboxFile(
     // Direct download via content API
     const res = await fetch("https://content.dropboxapi.com/2/files/download", {
       method: "POST",
+      signal,
       headers: {
         Authorization: `Bearer ${resolvedToken}`,
         "Dropbox-API-Arg": JSON.stringify({ path: pathDisplay }),
@@ -117,14 +132,17 @@ export async function downloadDropboxFile(
 
   // Fallback: Replit connector via temporary link
   const connectors = new ReplitConnectors();
-  const linkResponse = await connectors.proxy(
-    "dropbox",
-    "/2/files/get_temporary_link",
-    {
-      method: "POST",
-      body: JSON.stringify({ path: pathDisplay }),
-      headers: { "Content-Type": "application/json" },
-    }
+  const linkResponse = await waitWithSignal(
+    connectors.proxy(
+      "dropbox",
+      "/2/files/get_temporary_link",
+      {
+        method: "POST",
+        body: JSON.stringify({ path: pathDisplay }),
+        headers: { "Content-Type": "application/json" },
+      }
+    ),
+    signal
   );
 
   if (!linkResponse.ok) {
@@ -135,7 +153,7 @@ export async function downloadDropboxFile(
   const { link } = (await linkResponse.json()) as { link: string; metadata: unknown };
   if (!link) throw new Error("No link returned from get_temporary_link");
 
-  const fileResponse = await fetch(link);
+  const fileResponse = await fetch(link, { signal });
   if (!fileResponse.ok) {
     throw new Error(`Temporary link download ${fileResponse.status}`);
   }

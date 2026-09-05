@@ -6,7 +6,6 @@ import {
   useTriggerDropboxSync,
   useTriggerDropboxCleanup,
   useBulkUpdateInvoices,
-  useReextractInvoice,
   useListLieferanten,
   getListInvoicesQueryKey,
   getGetInvoiceStatsQueryKey,
@@ -69,6 +68,55 @@ import {
 } from "@/components/ui/select";
 import { exportInvoicePositionsToCSV, exportInvoicesToCSV } from "@/lib/csv";
 import { exportInvoicePositionsToXLSX, exportInvoicesToXLSX } from "@/lib/xlsx-export";
+
+const MAX_BULK_REEXTRACT_INVOICES = 20;
+
+type BulkReextractResult = {
+  id: number;
+  filename: string;
+  status: "success" | "empty" | "error";
+  message: string;
+};
+
+type ReextractJobStatus =
+  | { status: "processing" }
+  | { status: "success"; invoice: Invoice; extractedPositionCount: number }
+  | { status: "error"; error: string };
+
+async function runReextractJob(id: number): Promise<{
+  invoice: Invoice;
+  extractedPositionCount: number;
+}> {
+  const startResponse = await fetch(`/api/invoices/${id}/reextract`, {
+    method: "POST",
+  });
+  const startData = await startResponse.json().catch(() => null) as
+    | { jobId?: string; error?: string }
+    | null;
+  if (!startResponse.ok || !startData?.jobId) {
+    throw new Error(startData?.error || `Serverfehler (${startResponse.status})`);
+  }
+
+  while (true) {
+    await new Promise((resolve) => window.setTimeout(resolve, 750));
+    const statusResponse = await fetch(
+      `/api/invoices/reextract-jobs/${encodeURIComponent(startData.jobId)}`
+    );
+    const statusData = await statusResponse.json().catch(() => null) as
+      | ReextractJobStatus
+      | { error?: string }
+      | null;
+    if (!statusResponse.ok || !statusData) {
+      const errorMessage = statusData && "error" in statusData ? statusData.error : undefined;
+      throw new Error(errorMessage || `Serverfehler (${statusResponse.status})`);
+    }
+    if (!("status" in statusData)) {
+      throw new Error(statusData.error || "Ungültiger Auftragsstatus");
+    }
+    if (statusData.status === "success") return statusData;
+    if (statusData.status === "error") throw new Error(statusData.error);
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Column definitions
@@ -578,16 +626,23 @@ export function InvoiceTable() {
     },
   });
 
-  const reextractMutation = useReextractInvoice({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() });
-        toast.success("Rechnung neu extrahiert");
-      },
-      onError: () => toast.error("Neu-Extraktion fehlgeschlagen"),
-    },
-  });
+  const [singleReextractingId, setSingleReextractingId] = useState<number | null>(null);
+
+  const handleSingleReextract = async (id: number) => {
+    setSingleReextractingId(id);
+    try {
+      await runReextractJob(id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() }),
+      ]);
+      toast.success("Rechnung neu extrahiert");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Neu-Extraktion fehlgeschlagen");
+    } finally {
+      setSingleReextractingId(null);
+    }
+  };
 
   const syncMutation = useTriggerDropboxSync({
     mutation: {
@@ -617,10 +672,9 @@ export function InvoiceTable() {
 
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-  const [bulkReextractProgress, setBulkReextractProgress] = useState<{
-    done: number;
-    total: number;
-  } | null>(null);
+  const [isBulkReextracting, setIsBulkReextracting] = useState(false);
+  const [bulkReextractProgress, setBulkReextractProgress] = useState({ completed: 0, total: 0 });
+  const [bulkReextractResults, setBulkReextractResults] = useState<BulkReextractResult[]>([]);
 
   const handleBulkDelete = async () => {
     setIsBulkDeleting(true);
@@ -641,6 +695,79 @@ export function InvoiceTable() {
     } finally {
       setIsBulkDeleting(false);
       setBulkDeleteConfirmOpen(false);
+    }
+  };
+
+  const handleBulkReextract = async () => {
+    if (!invoices) return;
+
+    const selectedDropboxInvoices = invoices.filter(
+      (invoice) => selected.has(invoice.id) && invoice.dropboxFileId
+    );
+    if (selectedDropboxInvoices.length === 0) {
+      toast.error("Nur Dropbox-Rechnungen können neu extrahiert werden");
+      return;
+    }
+
+    const queue = selectedDropboxInvoices.slice(0, MAX_BULK_REEXTRACT_INVOICES);
+    if (selectedDropboxInvoices.length > MAX_BULK_REEXTRACT_INVOICES) {
+      toast.info(
+        `Zum Schutz vor Zeitüberschreitungen werden maximal ${MAX_BULK_REEXTRACT_INVOICES} Rechnungen pro Durchlauf verarbeitet.`
+      );
+    }
+
+    setIsBulkReextracting(true);
+    setBulkReextractResults([]);
+    setBulkReextractProgress({ completed: 0, total: queue.length });
+
+    const results: BulkReextractResult[] = [];
+    for (const invoice of queue) {
+      try {
+        const { extractedPositionCount: positionCount } = await runReextractJob(invoice.id);
+        results.push({
+          id: invoice.id,
+          filename: invoice.dateiname ?? `Rechnung ${invoice.id}`,
+          status: positionCount > 0 ? "success" : "empty",
+          message:
+            positionCount > 0
+              ? `${positionCount} Position${positionCount !== 1 ? "en" : ""} erkannt`
+              : "Keine Positionen erkannt",
+        });
+      } catch (error) {
+        results.push({
+          id: invoice.id,
+          filename: invoice.dateiname ?? `Rechnung ${invoice.id}`,
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Neu-Extraktion fehlgeschlagen",
+        });
+      } finally {
+        setBulkReextractResults([...results]);
+        setBulkReextractProgress({ completed: results.length, total: queue.length });
+      }
+    }
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() }),
+    ]);
+    setIsBulkReextracting(false);
+    if (selectedDropboxInvoices.length > queue.length) {
+      const processedIds = new Set(queue.map((invoice) => invoice.id));
+      setSelected((current) => new Set([...current].filter((id) => !processedIds.has(id))));
+      toast.info(
+        `${selectedDropboxInvoices.length - queue.length} weitere Rechnung${selectedDropboxInvoices.length - queue.length !== 1 ? "en bleiben" : " bleibt"} für den nächsten Durchlauf ausgewählt.`
+      );
+    }
+
+    const successes = results.filter((result) => result.status !== "error").length;
+    const errors = results.length - successes;
+    if (errors === 0) {
+      toast.success(`${successes} Rechnung${successes !== 1 ? "en" : ""} neu ausgelesen`);
+    } else {
+      toast.warning(`${successes} erfolgreich, ${errors} fehlgeschlagen`);
     }
   };
 
@@ -690,65 +817,6 @@ export function InvoiceTable() {
     selectedIds.length > 0
       ? invoices.filter((invoice) => selected.has(invoice.id))
       : invoices;
-
-  const handleBulkReextract = async () => {
-    const candidates = (
-      selectedIds.length > 0
-        ? invoices.filter((invoice) => selected.has(invoice.id))
-        : invoices.filter((invoice) => (invoice.positionen?.length ?? 0) === 0)
-    ).filter((invoice) => invoice.dropboxFileId);
-
-    if (candidates.length === 0) {
-      toast.info(
-        selectedIds.length > 0
-          ? "Keine der ausgewählten Rechnungen besitzt eine Dropbox-Datei."
-          : "Alle Dropbox-Rechnungen enthalten bereits Positionen."
-      );
-      return;
-    }
-
-    setBulkReextractProgress({ done: 0, total: candidates.length });
-    let succeeded = 0;
-    let failed = 0;
-
-    for (let index = 0; index < candidates.length; index += 1) {
-      const invoice = candidates[index]!;
-      try {
-        const response = await fetch(`/api/invoices/${invoice.id}/reextract`, {
-          method: "POST",
-        });
-        if (!response.ok) throw new Error(await response.text());
-        const updated = (await response.json()) as Invoice;
-        if ((updated.positionen?.length ?? 0) === 0) {
-          throw new Error("Keine Rechnungspositionen erkannt");
-        }
-        succeeded += 1;
-      } catch {
-        failed += 1;
-      } finally {
-        setBulkReextractProgress({
-          done: index + 1,
-          total: candidates.length,
-        });
-      }
-    }
-
-    await queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-    await queryClient.invalidateQueries({
-      queryKey: getGetInvoiceStatsQueryKey(),
-    });
-    setBulkReextractProgress(null);
-
-    if (failed === 0) {
-      toast.success(
-        `${succeeded} Rechnung${succeeded !== 1 ? "en" : ""} mit Positionen aktualisiert`
-      );
-    } else {
-      toast.warning(
-        `${succeeded} aktualisiert, ${failed} fehlgeschlagen. Bitte Dropbox-Verbindung prüfen.`
-      );
-    }
-  };
 
   const exportPositions = (format: "csv" | "xlsx") => {
     const count =
@@ -806,26 +874,6 @@ export function InvoiceTable() {
             </Button>
             <Button variant="outline" size="sm" onClick={() => exportPositions("xlsx")}>
               Positionen Excel
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleBulkReextract}
-              disabled={bulkReextractProgress !== null}
-              title={
-                selectedIds.length > 0
-                  ? "Ausgewählte Rechnungen neu auslesen"
-                  : "Bestehende Dropbox-Rechnungen ohne Positionen nachholen"
-              }
-            >
-              {bulkReextractProgress ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4 mr-1" />
-              )}
-              {bulkReextractProgress
-                ? `Positionen ${bulkReextractProgress.done}/${bulkReextractProgress.total}`
-                : "Positionen nachholen"}
             </Button>
 
             {/* ── Column picker ─────────────────────────────────────────── */}
@@ -959,20 +1007,15 @@ export function InvoiceTable() {
             </Button>
             <Button
               size="sm" variant="outline"
-              onClick={() => {
-                const dropboxIds = selectedIds.filter(
-                  (id) => invoices?.find((i) => i.id === id)?.dropboxFileId
-                );
-                if (dropboxIds.length === 0) {
-                  toast.error("Nur Dropbox-Rechnungen können neu extrahiert werden");
-                  return;
-                }
-                dropboxIds.forEach((id) => reextractMutation.mutate({ id }));
-                toast.info(`${dropboxIds.length} Datei${dropboxIds.length !== 1 ? "en" : ""} werden neu extrahiert…`);
-              }}
-              disabled={reextractMutation.isPending}
+              onClick={() => void handleBulkReextract()}
+              disabled={isBulkReextracting || singleReextractingId !== null}
             >
-              <Sparkles className="h-3.5 w-3.5 mr-1" /> Neu extrahieren (KI)
+              {isBulkReextracting
+                ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+              {isBulkReextracting
+                ? `Neu auslesen (${bulkReextractProgress.completed}/${bulkReextractProgress.total})`
+                : "Neu auslesen (KI)"}
             </Button>
             <Button
               size="sm" variant="outline"
@@ -995,6 +1038,50 @@ export function InvoiceTable() {
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               <X className="h-3.5 w-3.5 mr-1" /> Auswahl aufheben
             </Button>
+          </div>
+        )}
+
+        {(isBulkReextracting || bulkReextractResults.length > 0) && (
+          <div className="px-4 py-3 border-b border-border bg-muted/20" role="status" aria-live="polite">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span className="text-sm font-medium">
+                KI-Neuauslesung: {bulkReextractProgress.completed} von {bulkReextractProgress.total}
+              </span>
+              {!isBulkReextracting && (
+                <Button size="sm" variant="ghost" onClick={() => setBulkReextractResults([])}>
+                  <X className="h-3.5 w-3.5 mr-1" /> Schließen
+                </Button>
+              )}
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden mb-2">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{
+                  width: `${bulkReextractProgress.total > 0
+                    ? (bulkReextractProgress.completed / bulkReextractProgress.total) * 100
+                    : 0}%`,
+                }}
+              />
+            </div>
+            <ul className="max-h-36 overflow-y-auto space-y-1 text-xs">
+              {bulkReextractResults.map((result) => (
+                <li key={result.id} className="flex items-start gap-2">
+                  <span
+                    className={
+                      result.status === "error"
+                        ? "text-destructive"
+                        : result.status === "empty"
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-emerald-600 dark:text-emerald-400"
+                    }
+                  >
+                    {result.status === "error" ? "Fehler" : result.status === "empty" ? "Hinweis" : "Erfolg"}
+                  </span>
+                  <span className="truncate" title={result.filename}>{result.filename}</span>
+                  <span className="text-muted-foreground shrink-0">— {result.message}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -1132,11 +1219,13 @@ export function InvoiceTable() {
                               {inv.dropboxFileId && (
                                 <button
                                   title="Mit KI neu extrahieren"
-                                  onClick={(e) => { e.stopPropagation(); reextractMutation.mutate({ id: inv.id }); }}
-                                  disabled={reextractMutation.isPending}
+                                  onClick={(e) => { e.stopPropagation(); void handleSingleReextract(inv.id); }}
+                                  disabled={singleReextractingId !== null || isBulkReextracting}
                                   className="ml-1 text-muted-foreground/50 hover:text-primary transition-colors"
                                 >
-                                  <Sparkles className="inline h-3 w-3" />
+                                  {singleReextractingId === inv.id
+                                    ? <Loader2 className="inline h-3 w-3 animate-spin" />
+                                    : <Sparkles className="inline h-3 w-3" />}
                                 </button>
                               )}
                             </td>

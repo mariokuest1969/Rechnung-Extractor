@@ -272,7 +272,31 @@ export interface DropboxSyncResult {
   folder: string;
 }
 
+export type ReextractJobStartedStatus = typeof ReextractJobStartedStatus[keyof typeof ReextractJobStartedStatus];
 export interface ErrorResponse {
   error: string;
 }
 
+
+export const ReextractJobStartedStatus = {
+  processing: 'processing',
+} as const;
+
+export type ReextractJobStatus = {
+  status: 'processing';
+  createdAt: number;
+} | {
+  status: 'success';
+  createdAt: number;
+  invoice: Invoice;
+  extractedPositionCount: number;
+} | {
+  status: 'error';
+  createdAt: number;
+  error: string;
+};
+
+export interface ReextractJobStarted {
+  jobId: string;
+  status: ReextractJobStartedStatus;
+}

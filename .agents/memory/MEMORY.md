@@ -1,1 +1,2 @@
 - [Invoice AI extraction fallback](invoice-extraction-fallback.md) — empty/garbage invoice fields across many rows = AI extractor failed and silently used regex; check logs for 429/insufficient_quota. Dev & prod DBs are separate.
+- [AI job deadlines](ai-job-deadlines.md) — time out document extraction before persistence; publish terminal job state only after DB commit or rollback is final.

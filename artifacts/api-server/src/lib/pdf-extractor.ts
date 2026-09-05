@@ -36,6 +36,7 @@ function hasAiExtraction(): boolean {
 const MAX_AI_TEXT_LENGTH = 24_000;
 const OCR_RENDER_SCALE = 2;
 
+const AI_REQUEST_TIMEOUT_MS = 60_000;
 function createOpenAIClient(): OpenAI {
   const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
@@ -44,12 +45,18 @@ function createOpenAIClient(): OpenAI {
     throw new Error("Replit AI integration is not configured");
   }
 
-  return new OpenAI({ baseURL, apiKey });
+  return new OpenAI({
+    baseURL,
+    apiKey,
+    timeout: AI_REQUEST_TIMEOUT_MS,
+    maxRetries: 1,
+  });
 }
 
 async function recognizeScannedImage(
   image: Buffer,
-  pageNumber: number
+  pageNumber: number,
+  signal?: AbortSignal
 ): Promise<string> {
   const response = await createOpenAIClient().chat.completions.create({
     model: "gpt-4o-mini",
@@ -73,14 +80,15 @@ async function recognizeScannedImage(
     ],
     max_tokens: 4096,
     temperature: 0,
-  });
+  }, { signal });
 
   return response.choices[0]?.message?.content?.trim() ?? "";
 }
 
 type RecognizeScannedImage = (
   image: Buffer,
-  pageNumber: number
+  pageNumber: number,
+  signal?: AbortSignal
 ) => Promise<string>;
 
 async function extractTextFromScannedPage(
@@ -89,8 +97,10 @@ async function extractTextFromScannedPage(
     render: (options: Record<string, unknown>) => { promise: Promise<unknown> };
   },
   pageNumber: number,
-  recognizeImage: RecognizeScannedImage
+  recognizeImage: RecognizeScannedImage,
+  signal?: AbortSignal
 ): Promise<string> {
+  signal?.throwIfAborted();
   const viewport = page.getViewport({ scale: OCR_RENDER_SCALE });
   const canvas = createCanvas(
     Math.ceil(viewport.width),
@@ -104,7 +114,7 @@ async function extractTextFromScannedPage(
   }).promise;
 
   const image = canvas.toBuffer("image/jpeg", 85);
-  return recognizeImage(image, pageNumber);
+  return recognizeImage(image, pageNumber, signal);
 }
 
 interface PageExtractionDependencies {
@@ -123,7 +133,8 @@ interface ChatCompletionRequest {
 interface InvoiceExtractionDependencies extends PageExtractionDependencies {
   isAiExtractionAvailable: () => boolean;
   createStructuredCompletion: (
-    request: ChatCompletionRequest
+    request: ChatCompletionRequest,
+    signal?: AbortSignal
   ) => Promise<string>;
 }
 
@@ -135,16 +146,22 @@ const defaultPageExtractionDependencies: PageExtractionDependencies = {
 const defaultInvoiceExtractionDependencies: InvoiceExtractionDependencies = {
   ...defaultPageExtractionDependencies,
   isAiExtractionAvailable: hasAiExtraction,
-  createStructuredCompletion: async (request) => {
-    const response = await createOpenAIClient().chat.completions.create(request);
+  createStructuredCompletion: async (request, signal) => {
+    const response = await createOpenAIClient().chat.completions.create(request, { signal });
     return response.choices[0]?.message?.content ?? "{}";
   },
 };
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
 export async function extractPages(
   buffer: Buffer,
   filename: string,
-  dependencies: PageExtractionDependencies = defaultPageExtractionDependencies
+  dependencies: PageExtractionDependencies = defaultPageExtractionDependencies,
+  signal?: AbortSignal
 ): Promise<{ text: string; pageCount: number }> {
+  signal?.throwIfAborted();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const document = await pdfjs.getDocument({
     data: new Uint8Array(buffer),
@@ -156,6 +173,7 @@ export async function extractPages(
   try {
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
       try {
+        signal?.throwIfAborted();
         const page = await document.getPage(pageNumber);
         const content = await page.getTextContent();
         const embeddedText = content.items
@@ -179,7 +197,8 @@ export async function extractPages(
         const ocrText = await extractTextFromScannedPage(
           page,
           pageNumber,
-          dependencies.recognizeScannedImage
+          dependencies.recognizeScannedImage,
+          signal
         );
         if (ocrText) {
           pageTexts.push(`[Seite ${pageNumber}, OCR]\n${ocrText}`);
@@ -189,6 +208,7 @@ export async function extractPages(
           "Scanned PDF page processed with OCR"
         );
       } catch (err) {
+        if (signal?.aborted || isAbortError(err)) throw err;
         logger.warn(
           { err, filename, pageNumber },
           "PDF page extraction failed, continuing with remaining pages"
@@ -230,8 +250,10 @@ async function extractWithAI(
   text: string,
   pageCount: number,
   createStructuredCompletion:
-    InvoiceExtractionDependencies["createStructuredCompletion"]
+    InvoiceExtractionDependencies["createStructuredCompletion"],
+  signal?: AbortSignal
 ): Promise<ExtractedInvoice> {
+  signal?.throwIfAborted();
   const preparedText = prepareTextForAI(text);
   const prompt = `Du bist ein Experte für die Analyse von Rechnungen. Das Dokument hat ${pageCount} Seite${pageCount === 1 ? "" : "n"}. Berücksichtige ausdrücklich den Inhalt ALLER Seiten und extrahiere aus dem gesamten Rechnungstext die strukturierten Daten.
 
@@ -266,7 +288,7 @@ Verwende null wenn ein Wert nicht gefunden werden kann. Zahlen ohne Tausendertre
     response_format: { type: "json_object" },
     max_tokens: 4096,
     temperature: 0,
-  });
+  }, signal);
 
   const cleaned = content.replace(/```json\n?|\n?```/g, "").trim();
   const parsed = JSON.parse(cleaned) as Partial<ExtractedInvoice>;
@@ -393,12 +415,13 @@ function extractWithRegex(text: string): ExtractedInvoice {
 export async function extractInvoiceFromPDF(
   buffer: Buffer,
   filename: string,
-  dependencies: InvoiceExtractionDependencies = defaultInvoiceExtractionDependencies
+  dependencies: InvoiceExtractionDependencies = defaultInvoiceExtractionDependencies,
+  signal?: AbortSignal
 ): Promise<ExtractedInvoice> {
   let text = "";
   let pageCount = 0;
   try {
-    const parsed = await extractPages(buffer, filename, dependencies);
+    const parsed = await extractPages(buffer, filename, dependencies, signal);
     text = parsed.text;
     pageCount = parsed.pageCount;
     logger.info(
@@ -406,6 +429,7 @@ export async function extractInvoiceFromPDF(
       "PDF text extracted"
     );
   } catch (err) {
+    if (signal?.aborted || isAbortError(err)) throw err;
     logger.warn({ err, filename }, "PDF extraction failed, using empty text");
   }
 
@@ -426,13 +450,16 @@ export async function extractInvoiceFromPDF(
 
   if (dependencies.isAiExtractionAvailable()) {
     try {
+      signal?.throwIfAborted();
       logger.info({ filename, pageCount }, "Extracting invoice with Replit AI");
       return await extractWithAI(
         text,
         pageCount,
-        dependencies.createStructuredCompletion
+        dependencies.createStructuredCompletion,
+        signal
       );
     } catch (err) {
+      if (signal?.aborted || isAbortError(err)) throw err;
       logger.warn(
         { err, filename },
         "Replit AI extraction failed, falling back to regex"

@@ -28,4 +28,7 @@ export * from './invoiceStats';
 export * from './invoiceUpdate';
 export * from './lieferant';
 export * from './lieferantCreate';
+export * from './reextractJobStarted';
+export * from './reextractJobStartedStatus';
+export * from './reextractJobStatus';
 export * from './waehrungGroup';

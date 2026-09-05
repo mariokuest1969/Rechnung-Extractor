@@ -312,48 +312,23 @@ export const GetDropboxLinkResponse = zod.object({
 
 
 /**
- * @summary Re-extract invoice data from Dropbox PDF
+ * @summary Start re-extracting invoice data from Dropbox PDF
  */
 export const ReextractInvoiceParams = zod.object({
   "id": zod.coerce.number()
 })
 
 export const ReextractInvoiceResponse = zod.object({
-  "id": zod.number(),
-  "rechnungssteller": zod.string().nullish(),
-  "datum": zod.string().nullish(),
-  "rechnungsnummer": zod.string().nullish(),
-  "bruttoBetrag": zod.number().nullish(),
-  "steuersatz": zod.number().nullish(),
-  "steuerBetrag": zod.number().nullish(),
-  "nettoBetrag": zod.number().nullish(),
-  "waehrung": zod.string().nullish(),
-  "bemerkung": zod.string().nullish(),
-  "freifeld1": zod.string().nullish(),
-  "freifeld2": zod.string().nullish(),
-  "freifeld3": zod.string().nullish(),
-  "lieferantId": zod.number().nullish(),
-  "buchungskonto1": zod.string().nullish(),
-  "buchungskonto1Betrag": zod.number().nullish(),
-  "buchungskonto2": zod.string().nullish(),
-  "buchungskonto2Betrag": zod.number().nullish(),
-  "buchungstext": zod.string().nullish(),
-  "dateiname": zod.string().nullish(),
-  "dropboxFileId": zod.string().nullish(),
-  "positionen": zod.array(zod.object({
-  "positionsnummer": zod.string().nullish(),
-  "beschreibung": zod.string(),
-  "menge": zod.number().nullish(),
-  "einheit": zod.string().nullish(),
-  "einzelpreis": zod.number().nullish(),
-  "steuersatz": zod.number().nullish(),
-  "nettobetrag": zod.number().nullish(),
-  "bruttobetrag": zod.number().nullish()
-})).optional(),
-  "createdAt": zod.string()
+  "jobId": zod.string(),
+  "status": zod.enum(['processing'])
 })
 
-
+/**
+ * @summary Get the current re-extraction job result
+ */
+export const GetReextractJobParams = zod.object({
+  "jobId": zod.coerce.string()
+})
 /**
  * @summary Bulk update multiple invoices
  */
@@ -516,3 +491,49 @@ export const DeleteInvoiceParams = zod.object({
 export const DeleteInvoiceResponse = zod.void()
 
 
+export const GetReextractJobResponse = zod.union([zod.object({
+  "status": zod.enum(['processing']),
+  "createdAt": zod.number()
+}),zod.object({
+  "status": zod.enum(['success']),
+  "createdAt": zod.number(),
+  "invoice": zod.object({
+  "id": zod.number(),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "dateiname": zod.string().nullish(),
+  "dropboxFileId": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional(),
+  "createdAt": zod.string()
+}),
+  "extractedPositionCount": zod.number()
+}),zod.object({
+  "status": zod.enum(['error']),
+  "createdAt": zod.number(),
+  "error": zod.string()
+})])

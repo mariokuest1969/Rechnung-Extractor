@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db, invoicesTable } from "@workspace/db";
 import {
   GetInvoiceParams,
@@ -14,6 +15,36 @@ import { syncDropbox, cleanupDropbox, downloadDropboxFile } from "../lib/dropbox
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+const REEXTRACT_TIMEOUT_MS = 70_000;
+const REEXTRACT_JOB_TTL_MS = 30 * 60_000;
+const REEXTRACT_DB_LOCK_TIMEOUT_MS = 2_000;
+
+class ReextractTimeoutError extends Error {
+  constructor() {
+    super("Zeitlimit für die Neu-Extraktion überschritten");
+    this.name = "ReextractTimeoutError";
+  }
+}
+
+function isDatabaseTimeout(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error.code === "57014" || error.code === "55P03")
+  );
+}
+
+type ReextractJob =
+  | { status: "processing"; createdAt: number }
+  | {
+      status: "success";
+      createdAt: number;
+      invoice: ReturnType<typeof toApiInvoice>;
+      extractedPositionCount: number;
+    }
+  | { status: "error"; createdAt: number; error: string };
+
+const reextractJobs = new Map<string, ReextractJob>();
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -50,6 +81,90 @@ function toApiInvoice(row: typeof invoicesTable.$inferSelect) {
     positionen: row.positionen ?? [],
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+function pruneReextractJobs(): void {
+  const cutoff = Date.now() - REEXTRACT_JOB_TTL_MS;
+  for (const [jobId, job] of reextractJobs) {
+    if (job.createdAt < cutoff) reextractJobs.delete(jobId);
+  }
+}
+
+async function runReextractJob(jobId: string, id: number): Promise<void> {
+  const controller = new AbortController();
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
+    if (!inv) throw new Error("Rechnung nicht gefunden");
+    if (!inv.dropboxFileId) throw new Error("Diese Rechnung hat keine Dropbox-Datei");
+
+    const extraction = (async () => {
+      const buffer = await downloadDropboxFile(
+        inv.dropboxFileId!,
+        undefined,
+        controller.signal
+      );
+      return extractInvoiceFromPDF(
+        buffer,
+        inv.dateiname ?? inv.dropboxFileId!,
+        undefined,
+        controller.signal
+      );
+    })();
+    const deadline = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(new ReextractTimeoutError());
+      }, REEXTRACT_TIMEOUT_MS);
+    });
+    const extracted = await Promise.race([extraction, deadline]);
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = undefined;
+    }
+
+    const extractedPositionCount = extracted.positionen.length;
+    const updated = await db.transaction(async (tx) => {
+      await tx.execute(sql.raw("SET LOCAL statement_timeout = '5000ms'"));
+      await tx.execute(sql.raw(
+        `SET LOCAL lock_timeout = '${REEXTRACT_DB_LOCK_TIMEOUT_MS}ms'`
+      ));
+      const [row] = await tx.update(invoicesTable).set({
+        rechnungssteller: extracted.rechnungssteller ?? inv.rechnungssteller,
+        datum: extracted.datum ?? inv.datum,
+        rechnungsnummer: extracted.rechnungsnummer ?? inv.rechnungsnummer,
+        bruttoBetrag: extracted.bruttoBetrag != null ? String(extracted.bruttoBetrag) : inv.bruttoBetrag,
+        steuersatz: extracted.steuersatz != null ? String(extracted.steuersatz) : inv.steuersatz,
+        steuerBetrag: extracted.steuerBetrag != null ? String(extracted.steuerBetrag) : inv.steuerBetrag,
+        nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : inv.nettoBetrag,
+        waehrung: extracted.waehrung ?? inv.waehrung,
+        bemerkung: extracted.bemerkung ?? inv.bemerkung,
+        positionen: extractedPositionCount > 0 ? extracted.positionen : (inv.positionen ?? []),
+      }).where(eq(invoicesTable.id, id)).returning();
+      return row!;
+    });
+
+    reextractJobs.set(jobId, {
+      status: "success",
+      createdAt: Date.now(),
+      invoice: toApiInvoice(updated),
+      extractedPositionCount,
+    });
+  } catch (error) {
+    logger.error({ err: error, id, jobId }, "Reextract job failed");
+    reextractJobs.set(jobId, {
+      status: "error",
+      createdAt: Date.now(),
+      error:
+        error instanceof ReextractTimeoutError || isDatabaseTimeout(error)
+          ? "Zeitlimit für die Neu-Extraktion überschritten"
+          : error instanceof Error
+            ? error.message
+            : "Neu-Extraktion fehlgeschlagen",
+    });
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 // GET /invoices
@@ -258,36 +373,25 @@ router.get("/invoices/:id/dropbox-link", async (req, res): Promise<void> => {
   }
 });
 
-// POST /invoices/:id/reextract — re-download from Dropbox and re-run extraction
+// POST /invoices/:id/reextract — start re-extraction job
 router.post("/invoices/:id/reextract", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Ungültige ID" }); return; }
-  const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
-  if (!inv) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
-  if (!inv.dropboxFileId) { res.status(400).json({ error: "Diese Rechnung hat keine Dropbox-Datei" }); return; }
-  try {
-    const buffer = await downloadDropboxFile(inv.dropboxFileId);
-    const extracted = await extractInvoiceFromPDF(buffer, inv.dateiname ?? inv.dropboxFileId);
-    const [updated] = await db.update(invoicesTable).set({
-      rechnungssteller: extracted.rechnungssteller ?? inv.rechnungssteller,
-      datum: extracted.datum ?? inv.datum,
-      rechnungsnummer: extracted.rechnungsnummer ?? inv.rechnungsnummer,
-      bruttoBetrag: extracted.bruttoBetrag != null ? String(extracted.bruttoBetrag) : inv.bruttoBetrag,
-      steuersatz: extracted.steuersatz != null ? String(extracted.steuersatz) : inv.steuersatz,
-      steuerBetrag: extracted.steuerBetrag != null ? String(extracted.steuerBetrag) : inv.steuerBetrag,
-      nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : inv.nettoBetrag,
-      waehrung: extracted.waehrung ?? inv.waehrung,
-      bemerkung: extracted.bemerkung ?? inv.bemerkung,
-      positionen:
-        extracted.positionen.length > 0
-          ? extracted.positionen
-          : inv.positionen,
-    }).where(eq(invoicesTable.id, id)).returning();
-    res.json(toApiInvoice(updated!));
-  } catch (err) {
-    req.log.error({ err, id }, "Reextract failed");
-    res.status(500).json({ error: "Neu-Extraktion fehlgeschlagen" });
+  pruneReextractJobs();
+  const jobId = randomUUID();
+  reextractJobs.set(jobId, { status: "processing", createdAt: Date.now() });
+  void runReextractJob(jobId, id);
+  res.status(202).json({ jobId, status: "processing" });
+});
+
+router.get("/invoices/reextract-jobs/:jobId", (req, res): void => {
+  pruneReextractJobs();
+  const job = reextractJobs.get(req.params.jobId as string);
+  if (!job) {
+    res.status(404).json({ error: "Neu-Extraktionsauftrag nicht gefunden" });
+    return;
   }
+  res.json(job);
 });
 
 // POST /invoices/bulk-delete
