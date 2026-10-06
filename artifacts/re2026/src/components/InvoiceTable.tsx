@@ -80,45 +80,8 @@ type BulkReextractResult = {
   message: string;
 };
 
-type ReextractJobStatus =
-  | { status: "processing" }
-  | { status: "success"; invoice: Invoice; extractedPositionCount: number }
-  | { status: "error"; error: string };
-
-async function runReextractJob(id: number): Promise<{
-  invoice: Invoice;
-  extractedPositionCount: number;
-}> {
-  const startResponse = await fetch(`/api/invoices/${id}/reextract`, {
-    method: "POST",
-  });
-  const startData = await startResponse.json().catch(() => null) as
-    | { jobId?: string; error?: string }
-    | null;
-  if (!startResponse.ok || !startData?.jobId) {
-    throw new Error(startData?.error || `Serverfehler (${startResponse.status})`);
-  }
-
-  while (true) {
-    await new Promise((resolve) => window.setTimeout(resolve, 750));
-    const statusResponse = await fetch(
-      `/api/invoices/reextract-jobs/${encodeURIComponent(startData.jobId)}`
-    );
-    const statusData = await statusResponse.json().catch(() => null) as
-      | ReextractJobStatus
-      | { error?: string }
-      | null;
-    if (!statusResponse.ok || !statusData) {
-      const errorMessage = statusData && "error" in statusData ? statusData.error : undefined;
-      throw new Error(errorMessage || `Serverfehler (${statusResponse.status})`);
-    }
-    if (!("status" in statusData)) {
-      throw new Error(statusData.error || "Ungültiger Auftragsstatus");
-    }
-    if (statusData.status === "success") return statusData;
-    if (statusData.status === "error") throw new Error(statusData.error);
-  }
-}
+import { runPersistentReextractJob } from "@/lib/reextract-job";
+const runReextractJob = (id: number) => runPersistentReextractJob<Invoice>(id);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Column definitions

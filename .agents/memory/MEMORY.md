@@ -1,3 +1,4 @@
 - [Invoice AI extraction fallback](invoice-extraction-fallback.md) — empty/garbage invoice fields across many rows = AI extractor failed and silently used regex; check logs for 429/insufficient_quota. Dev & prod DBs are separate.
 - [AI job deadlines](ai-job-deadlines.md) — time out document extraction before persistence; publish terminal job state only after DB commit or rollback is final.
 - [Dropbox setup preference](dropbox-setup.md) — user wants App Key and App Secret entered inside RE2026, not manual access tokens or a Replit connector.
+- [Test bundle resolution](test-bundle-resolution.md) — bundled workspace tests must resolve external dependencies from their owning package under pnpm isolation.

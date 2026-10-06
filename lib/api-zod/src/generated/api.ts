@@ -403,7 +403,8 @@ export const GetReextractJobResponse = zod.union([zod.object({
 }),zod.object({
   "status": zod.enum(['error']),
   "createdAt": zod.number(),
-  "error": zod.string()
+  "error": zod.string(),
+  "retryable": zod.boolean().optional()
 })])
 
 
@@ -567,5 +568,4 @@ export const DeleteInvoiceParams = zod.object({
 })
 
 export const DeleteInvoiceResponse = zod.void()
-
 

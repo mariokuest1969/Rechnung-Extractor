@@ -19,4 +19,5 @@ export type ReextractJobStatus = {
   status: 'error';
   createdAt: number;
   error: string;
+  retryable?: boolean;
 };

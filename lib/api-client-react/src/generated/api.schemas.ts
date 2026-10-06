@@ -316,9 +316,9 @@ export type ReextractJobStatus = {
   status: 'error';
   createdAt: number;
   error: string;
+  retryable?: boolean;
 };
 
 export interface ErrorResponse {
   error: string;
 }
-

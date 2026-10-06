@@ -13,6 +13,7 @@ import {
 import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
 import { syncDropbox, cleanupDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
 import { logger } from "../lib/logger";
+import { createReextractJob, readReextractJob, commitReextractJob, failReextractJob } from "../lib/reextract-jobs";
 import {
   getReextractErrorHttpStatus,
   keepExistingPositionsWhenExtractionIsEmpty,
@@ -21,9 +22,6 @@ import {
 
 const router: IRouter = Router();
 const REEXTRACT_TIMEOUT_MS = 70_000;
-const REEXTRACT_JOB_TTL_MS = 30 * 60_000;
-const REEXTRACT_DB_LOCK_TIMEOUT_MS = 2_000;
-
 function isDatabaseTimeout(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -31,19 +29,6 @@ function isDatabaseTimeout(error: unknown): boolean {
     (error.code === "57014" || error.code === "55P03")
   );
 }
-
-type ReextractJob =
-  | { status: "processing"; createdAt: number }
-  | {
-      status: "success";
-      createdAt: number;
-      invoice: ReturnType<typeof toApiInvoice>;
-      extractedPositionCount: number;
-    }
-  | { status: "error"; createdAt: number; error: string; httpStatus: number };
-
-const reextractJobs = new Map<string, ReextractJob>();
-
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -80,14 +65,6 @@ function toApiInvoice(row: typeof invoicesTable.$inferSelect) {
     createdAt: row.createdAt.toISOString(),
   };
 }
-
-function pruneReextractJobs(): void {
-  const cutoff = Date.now() - REEXTRACT_JOB_TTL_MS;
-  for (const [jobId, job] of reextractJobs) {
-    if (job.createdAt < cutoff) reextractJobs.delete(jobId);
-  }
-}
-
 async function runReextractJob(jobId: string, id: number): Promise<void> {
   try {
     const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
@@ -109,11 +86,7 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
     }, REEXTRACT_TIMEOUT_MS);
 
     const extractedPositionCount = extracted.positionen.length;
-    const updated = await db.transaction(async (tx) => {
-      await tx.execute(sql.raw("SET LOCAL statement_timeout = '5000ms'"));
-      await tx.execute(sql.raw(
-        `SET LOCAL lock_timeout = '${REEXTRACT_DB_LOCK_TIMEOUT_MS}ms'`
-      ));
+    await commitReextractJob(jobId, async (tx) => {
       const [row] = await tx.update(invoicesTable).set({
         rechnungssteller: extracted.rechnungssteller ?? inv.rechnungssteller,
         datum: extracted.datum ?? inv.datum,
@@ -129,21 +102,13 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
           inv.positionen
         ),
       }).where(eq(invoicesTable.id, id)).returning();
-      return row!;
-    });
-
-    reextractJobs.set(jobId, {
-      status: "success",
-      createdAt: Date.now(),
-      invoice: toApiInvoice(updated),
-      extractedPositionCount,
+      if (!row) throw new Error("Rechnung nicht gefunden");
+      return { invoice: toApiInvoice(row), extractedPositionCount };
     });
   } catch (error) {
     logger.error({ err: error, id, jobId }, "Reextract job failed");
     const httpStatus = getReextractErrorHttpStatus(error, isDatabaseTimeout);
-    reextractJobs.set(jobId, {
-      status: "error",
-      createdAt: Date.now(),
+    await failReextractJob(jobId, {
       httpStatus,
       error:
         httpStatus === 504
@@ -157,13 +122,19 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
 
 // GET /invoices
 router.get("/invoices", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(invoicesTable).orderBy(invoicesTable.createdAt);
+    const rows = await db
+      .select()
+      .from(invoicesTable)
+      .where(inArray(invoicesTable.id, numericIds));
   res.json(rows.map(toApiInvoice));
 });
 
 // GET /invoices/stats
 router.get("/invoices/stats", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(invoicesTable);
+    const rows = await db
+      .select()
+      .from(invoicesTable)
+      .where(inArray(invoicesTable.id, numericIds));
   const totalInvoices = rows.length;
   const totalBrutto = rows.reduce((s, r) => s + (r.bruttoBetrag != null ? parseFloat(r.bruttoBetrag) : 0), 0);
   const totalNetto = rows.reduce((s, r) => s + (r.nettoBetrag != null ? parseFloat(r.nettoBetrag) : 0), 0);
@@ -195,19 +166,7 @@ router.post("/invoices/upload", upload.array("files"), async (req, res): Promise
   for (const file of files) {
     try {
       const extracted = await extractInvoiceFromPDF(file.buffer, file.originalname);
-      const [row] = await db.insert(invoicesTable).values({
-        rechnungssteller: extracted.rechnungssteller,
-        datum: extracted.datum,
-        rechnungsnummer: extracted.rechnungsnummer,
-        bruttoBetrag: extracted.bruttoBetrag != null ? String(extracted.bruttoBetrag) : null,
-        steuersatz: extracted.steuersatz != null ? String(extracted.steuersatz) : null,
-        steuerBetrag: extracted.steuerBetrag != null ? String(extracted.steuerBetrag) : null,
-        nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : null,
-        waehrung: extracted.waehrung ?? "EUR",
-        bemerkung: extracted.bemerkung,
-        positionen: extracted.positionen,
-        dateiname: file.originalname,
-      }).returning();
+  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
       created.push(toApiInvoice(row));
     } catch (err) {
       req.log.error({ err, filename: file.originalname }, "Failed to process PDF");
@@ -235,23 +194,11 @@ router.post("/invoices/extract-preview", upload.array("files"), async (req, res)
 
 // POST /invoices/upload-confirmed — save pre-reviewed invoice data
 router.post("/invoices/upload-confirmed", async (req, res): Promise<void> => {
-  const body = req.body as unknown;
+  const body = UpdateInvoiceBody.safeParse(req.body);
   if (!Array.isArray(body) || body.length === 0) { res.status(400).json({ error: "Keine Daten" }); return; }
   const created: ReturnType<typeof toApiInvoice>[] = [];
   for (const item of body as Record<string, unknown>[]) {
-    const [row] = await db.insert(invoicesTable).values({
-      rechnungssteller: (item.rechnungssteller as string) ?? null,
-      datum: (item.datum as string) ?? null,
-      rechnungsnummer: (item.rechnungsnummer as string) ?? null,
-      bruttoBetrag: item.bruttoBetrag != null ? String(item.bruttoBetrag) : null,
-      steuersatz: item.steuersatz != null ? String(item.steuersatz) : null,
-      steuerBetrag: item.steuerBetrag != null ? String(item.steuerBetrag) : null,
-      nettoBetrag: item.nettoBetrag != null ? String(item.nettoBetrag) : null,
-      waehrung: (item.waehrung as string) ?? "EUR",
-      bemerkung: (item.bemerkung as string) ?? null,
-      positionen: Array.isArray(item.positionen) ? item.positionen : [],
-      dateiname: (item.dateiname as string) ?? null,
-    }).returning();
+  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
     if (row) created.push(toApiInvoice(row));
   }
   res.json(created);
@@ -361,21 +308,21 @@ router.get("/invoices/:id/dropbox-link", async (req, res): Promise<void> => {
 router.post("/invoices/:id/reextract", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Ungültige ID" }); return; }
-  pruneReextractJobs();
   const jobId = randomUUID();
-  reextractJobs.set(jobId, { status: "processing", createdAt: Date.now() });
-  void runReextractJob(jobId, id);
+  await createReextractJob(jobId);
+  void runReextractJob(jobId, id).catch((err) => {
+    logger.error({ err, jobId }, "Could not persist job failure; lease will expire");
+  });
   res.status(202).json({ jobId, status: "processing" });
 });
 
-router.get("/invoices/reextract-jobs/:jobId", (req, res): void => {
-  pruneReextractJobs();
-  const job = reextractJobs.get(req.params.jobId as string);
+router.get("/invoices/reextract-jobs/:jobId", async (req, res): Promise<void> => {
+  const job = await readReextractJob(req.params.jobId as string);
   if (!job) {
     res.status(404).json({ error: "Neu-Extraktionsauftrag nicht gefunden" });
     return;
   }
-  res.status(job.status === "error" ? job.httpStatus : 200).json(job);
+  res.status(job.status === "error" ? Number(job.httpStatus) : 200).json(job);
 });
 
 // POST /invoices/bulk-delete
@@ -392,7 +339,7 @@ router.post("/invoices/bulk-delete", async (req, res): Promise<void> => {
 // POST /invoices/dropbox-sync
 router.post("/invoices/dropbox-sync", async (req, res): Promise<void> => {
   try {
-    const result = await syncDropbox();
+    const result = await cleanupDropbox();
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Dropbox sync failed");
@@ -414,17 +361,17 @@ router.post("/invoices/dropbox-cleanup", async (req, res): Promise<void> => {
 // GET /invoices/:id
 router.get("/invoices/:id", async (req, res): Promise<void> => {
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const params = GetInvoiceParams.safeParse({ id: parseInt(rawId, 10) });
+  const params = DeleteInvoiceParams.safeParse({ id: parseInt(rawId, 10) });
   if (!params.success) { res.status(400).json({ error: "Ungültige ID" }); return; }
-  const [row] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!row) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   res.json(toApiInvoice(row));
 });
 
-// PATCH /invoices/:id
-router.patch("/invoices/:id", async (req, res): Promise<void> => {
+// DELETE /invoices/:id
+router.delete("/invoices/:id", async (req, res): Promise<void> => {
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const params = UpdateInvoiceParams.safeParse({ id: parseInt(rawId, 10) });
+  const params = DeleteInvoiceParams.safeParse({ id: parseInt(rawId, 10) });
   if (!params.success) { res.status(400).json({ error: "Ungültige ID" }); return; }
   const body = UpdateInvoiceBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
@@ -449,7 +396,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (d.buchungskonto2Betrag !== undefined) update.buchungskonto2Betrag = d.buchungskonto2Betrag != null ? String(d.buchungskonto2Betrag) : null;
   if (d.buchungstext !== undefined) update.buchungstext = d.buchungstext;
   if (Object.keys(update).length === 0) { res.status(400).json({ error: "Keine Felder" }); return; }
-  const [row] = await db.update(invoicesTable).set(update).where(eq(invoicesTable.id, params.data.id)).returning();
+  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!row) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   res.json(toApiInvoice(row));
 });

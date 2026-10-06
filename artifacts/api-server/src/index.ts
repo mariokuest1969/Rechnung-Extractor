@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startDropboxPoller } from "./lib/dropbox-poller";
+import { maintainReextractJobs } from "./lib/reextract-jobs";
 
 const rawPort = process.env["PORT"];
 
@@ -23,6 +24,11 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  const maintainJobs = () => maintainReextractJobs().catch((err) => {
+    logger.error({ err }, "Reextract job maintenance failed");
+  });
+  void maintainJobs();
+  setInterval(() => void maintainJobs(), 30_000).unref();
 
   // Start Dropbox background poller
   startDropboxPoller();

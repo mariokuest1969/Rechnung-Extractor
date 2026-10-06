@@ -1,6 +1,7 @@
 import { cp, mkdir, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { build } from "esbuild";
+import { createRequire } from "node:module";
 
 const outputDirectory = new URL("./.test-dist/", import.meta.url);
 const outputFile = new URL("tests.mjs", outputDirectory);
@@ -12,6 +13,16 @@ await build({
   format: "esm",
   outfile: outputFile.pathname,
   packages: "external",
+  alias: { "@workspace/db": new URL("../../lib/db/src/index.ts", import.meta.url).pathname },
+  plugins: [{
+    name: "db-runtime-dependencies",
+    setup(build) {
+      build.onResolve({ filter: /^(pg|drizzle-zod)$/ }, ({ path }) => ({
+        path: createRequire(new URL("../../lib/db/package.json", import.meta.url)).resolve(path),
+        external: true,
+      }));
+    },
+  }],
   platform: "node",
   sourcemap: "inline",
   target: "node24",

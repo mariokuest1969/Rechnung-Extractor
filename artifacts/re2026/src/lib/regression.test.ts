@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Invoice } from "@workspace/api-client-react";
+import { runPersistentReextractJob } from "./reextract-job";
 import {
   MAX_BULK_REEXTRACT_INVOICES,
   createBulkReextractBlock,
@@ -10,6 +11,31 @@ import {
   createPositionExportObjects,
   createPositionExportRows,
 } from "./position-export";
+
+test("polling survives restart outage, reports interruption, and processes the next invoice", async () => {
+  const replies: Array<Response | Error> = [
+    Response.json({ jobId: "old" }), new Error("connection reset"),
+    new Response("restarting", { status: 502 }),
+    Response.json({ status: "processing" }),
+    Response.json({ status: "error", error: "Bitte erneut auslesen.", retryable: true }, { status: 409 }),
+    Response.json({ jobId: "new" }),
+    Response.json({ status: "success", invoice: { id: 2 }, extractedPositionCount: 1 }),
+  ];
+  let posts = 0;
+  const request: typeof fetch = async (_url, init) => {
+    if (init?.method === "POST") posts++;
+    const reply = replies.shift();
+    if (reply instanceof Error) throw reply;
+    assert.ok(reply);
+    return reply;
+  };
+  const outcomes = await processSequentially([1, 2], (id) =>
+    runPersistentReextractJob(id, request, async () => {}));
+  assert.equal(outcomes[0].status, "rejected");
+  assert.equal(outcomes[1].status, "fulfilled");
+  assert.equal(posts, 2);
+  assert.equal(replies.length, 0);
+});
 
 test("processing continues after a timeout or individual error", async () => {
   const visited: number[] = [];

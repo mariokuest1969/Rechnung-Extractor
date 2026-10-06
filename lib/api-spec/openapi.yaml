@@ -447,6 +447,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReextractJobStatus"
+        "409":
+          description: Interrupted job that can be retried
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReextractJobStatus"
+        "500":
+          description: Extraction failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReextractJobStatus"
+        "504":
+          description: Extraction timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReextractJobStatus"
         "404":
           description: Job not found
           content:
@@ -1053,6 +1071,8 @@ components:
               type: integer
             error:
               type: string
+            retryable:
+              type: boolean
 
     ErrorResponse:
       type: object
