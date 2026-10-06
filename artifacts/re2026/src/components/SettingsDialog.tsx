@@ -35,6 +35,11 @@ export function SettingsDialog() {
   const [folder, setFolder]         = useState("");
   const callbackMessage = useDropboxCallback(() => setOpen(true));
   const queryClient = useQueryClient();
+  useEffect(() => {
+    const openDropbox = () => setOpen(true);
+    window.addEventListener("open-dropbox-settings", openDropbox);
+    return () => window.removeEventListener("open-dropbox-settings", openDropbox);
+  }, []);
 
   const { data: settings, isLoading } = useGetSettings();
   const {

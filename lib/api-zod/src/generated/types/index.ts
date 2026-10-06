@@ -22,6 +22,8 @@ export * from './dropboxConnectionStatus';
 export * from './dropboxConnectionStatusConnectionMethod';
 export * from './dropboxConnectionStatusState';
 export * from './dropboxLinkResponse';
+export * from './dropboxReconnectError';
+export * from './dropboxReconnectErrorCode';
 export * from './dropboxSyncResult';
 export * from './errorResponse';
 export * from './healthStatus';

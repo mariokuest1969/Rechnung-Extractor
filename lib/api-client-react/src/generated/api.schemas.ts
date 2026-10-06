@@ -5,6 +5,18 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+export type DropboxReconnectErrorCode = typeof DropboxReconnectErrorCode[keyof typeof DropboxReconnectErrorCode];
+
+
+export const DropboxReconnectErrorCode = {
+  DROPBOX_RECONNECT_REQUIRED: 'DROPBOX_RECONNECT_REQUIRED',
+} as const;
+
+export interface DropboxReconnectError {
+  error: string;
+  code: DropboxReconnectErrorCode;
+}
+
 export interface DropboxAppInfo {
   appKey: string;
   configured: boolean;
@@ -322,3 +334,4 @@ export type ReextractJobStatus = {
 export interface ErrorResponse {
   error: string;
 }
+

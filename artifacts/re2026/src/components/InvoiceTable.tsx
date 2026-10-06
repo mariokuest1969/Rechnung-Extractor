@@ -5,6 +5,8 @@ import {
   useDeleteInvoice,
   useTriggerDropboxSync,
   useTriggerDropboxCleanup,
+  useGetDropboxStatus,
+  getGetDropboxStatusQueryKey,
   useBulkUpdateInvoices,
   useListLieferanten,
   getListInvoicesQueryKey,
@@ -18,6 +20,7 @@ import { EditableCell } from "./EditableCell";
 import { LieferantenDialog } from "./LieferantenDialog";
 import { BuchungsDialog } from "./BuchungsDialog";
 import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
+import { DropboxConnectionNotice } from "./DropboxConnectionNotice";
 import { formatNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -417,6 +420,18 @@ export function InvoiceTable() {
   const { data: invoices, isLoading } = useListInvoices();
   const { data: lieferanten = [] } = useListLieferanten();
   const queryClient = useQueryClient();
+  const { data: dropboxStatus } = useGetDropboxStatus({
+    query: { queryKey: getGetDropboxStatusQueryKey(), retry: false, refetchInterval: 30_000 },
+  });
+  const reconnectRequired = dropboxStatus?.state === "disconnected";
+  const connectionNotice = reconnectRequired
+    ? <DropboxConnectionNotice message={dropboxStatus.message} />
+    : null;
+  const handleDropboxError = (error: unknown, fallback: string) => {
+    const data = (error as { data?: { code?: string; error?: string } })?.data;
+    toast.error(data?.code === "DROPBOX_RECONNECT_REQUIRED" ? data.error : fallback);
+    void queryClient.invalidateQueries({ queryKey: getGetDropboxStatusQueryKey() });
+  };
 
   const lieferantenMap = useMemo(() => {
     const m = new Map<number, string>();
@@ -616,7 +631,7 @@ export function InvoiceTable() {
         queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() });
         toast.success(`Dropbox-Sync: ${data.imported} neu importiert, ${data.skipped} bereits vorhanden`);
       },
-      onError: () => toast.error("Dropbox-Sync fehlgeschlagen"),
+      onError: (error) => handleDropboxError(error, "Dropbox-Sync fehlgeschlagen"),
     },
   });
 
@@ -631,7 +646,7 @@ export function InvoiceTable() {
           toast.success(`Bereinigung: ${data.removed} Einträge entfernt (${data.checked} geprüft)`);
         }
       },
-      onError: () => toast.error("Dropbox-Bereinigung fehlgeschlagen"),
+      onError: (error) => handleDropboxError(error, "Dropbox-Bereinigung fehlgeschlagen"),
     },
   });
 
@@ -767,20 +782,24 @@ export function InvoiceTable() {
 
   if (isLoading) {
     return (
+      <>{connectionNotice}
       <div className="bg-card rounded-lg border border-border p-8 flex items-center justify-center min-h-[300px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
       </div>
+      </>
     );
   }
 
   if (!invoices || invoices.length === 0) {
     return (
+      <>{connectionNotice}
       <div className="bg-card rounded-lg border border-border p-12 text-center">
         <h3 className="text-lg font-medium text-foreground mb-2">Keine Rechnungen vorhanden</h3>
         <p className="text-muted-foreground text-sm">
-          Laden Sie PDFs hoch oder warten Sie auf den automatischen Dropbox-Scan.
+          {reconnectRequired ? "Laden Sie PDFs hoch oder verbinden Sie Dropbox erneut." : "Laden Sie PDFs hoch oder warten Sie auf den automatischen Dropbox-Scan."}
         </p>
       </div>
+      </>
     );
   }
 
@@ -810,6 +829,7 @@ export function InvoiceTable() {
 
   return (
     <>
+      {connectionNotice}
       <div className="bg-card rounded-lg border border-border overflow-hidden flex flex-col shadow-sm">
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-2 flex-wrap">
@@ -821,7 +841,7 @@ export function InvoiceTable() {
             <Button
               variant="outline" size="sm"
               onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending || cleanupMutation.isPending}
+              disabled={reconnectRequired || syncMutation.isPending || cleanupMutation.isPending}
             >
               {syncMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
               Dropbox jetzt prüfen
@@ -829,7 +849,7 @@ export function InvoiceTable() {
             <Button
               variant="outline" size="sm"
               onClick={() => cleanupMutation.mutate()}
-              disabled={cleanupMutation.isPending || syncMutation.isPending}
+              disabled={reconnectRequired || cleanupMutation.isPending || syncMutation.isPending}
               title="Einträge entfernen, deren Datei in Dropbox gelöscht wurde"
             >
               {cleanupMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}

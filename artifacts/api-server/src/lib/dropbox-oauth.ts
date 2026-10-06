@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { encryptDropboxValue, decryptDropboxValue, tokenRequest } from "./dropbox-oauth-security";
 import { and, eq, like, lt } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
+import { resetDropboxConnection } from "./dropbox-connection";
 
 const CONFIG_KEY = "dropbox_oauth";
 const PENDING_PREFIX = "dropbox_pending_";
@@ -77,6 +78,7 @@ export async function finishDropboxAuthorization(state: string, code: string, us
     await tx.delete(settingsTable).where(eq(settingsTable.key, "dropbox_token"));
   });
   cached = { config: value, token: tokens.access_token, expires: Date.now() + tokens.expires_in * 1000 - 60_000 };
+  resetDropboxConnection();
   return { appKey: pending.appKey, configured: true };
 }
 

@@ -569,3 +569,4 @@ export const DeleteInvoiceParams = zod.object({
 
 export const DeleteInvoiceResponse = zod.void()
 
+

@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { requireDropboxReconnect } from "./dropbox-connection";
 
 function encryptionKey() {
   const secret = process.env.SESSION_SECRET;
@@ -25,7 +26,14 @@ export async function tokenRequest(params: Record<string, string>, request: type
     method: "POST", body: new URLSearchParams(params),
     signal: AbortSignal.timeout(20_000),
   });
-  if (!response.ok) throw new Error("Dropbox-Anmeldung fehlgeschlagen. Bitte App-Daten und Freigabe prüfen und erneut verbinden.");
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({})) as { error?: string };
+    if (params.grant_type === "refresh_token" &&
+        (response.status === 401 || data.error === "invalid_grant" || data.error === "invalid_client")) {
+      requireDropboxReconnect();
+    }
+    throw new Error(`Dropbox-Anmeldung fehlgeschlagen (Status ${response.status}). Bitte App-Daten und Freigabe prüfen.`);
+  }
   const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
   if (!data.access_token || !data.expires_in) throw new Error("Dropbox hat keinen gültigen Zugriff zurückgegeben.");
   return { ...data, access_token: data.access_token, expires_in: data.expires_in };

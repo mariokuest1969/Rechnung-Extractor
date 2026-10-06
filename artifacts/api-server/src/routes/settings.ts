@@ -5,6 +5,7 @@ import { ReplitConnectors } from "@replit/connectors-sdk";
 import { GetDropboxStatusResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getDropboxOAuthToken } from "../lib/dropbox-oauth";
+import { assertDropboxConnection, checkDropboxResponse, DropboxAuthError, resetDropboxConnection } from "../lib/dropbox-connection";
 
 const router: IRouter = Router();
 
@@ -47,6 +48,7 @@ export async function getDropboxFolder(): Promise<string> {
 }
 
 export async function getDropboxToken(): Promise<string | null> {
+  assertDropboxConnection();
   const oauthToken = await getDropboxOAuthToken();
   if (oauthToken) return oauthToken;
   const val = await getSetting(SETTING_DROPBOX_TOKEN);
@@ -87,6 +89,7 @@ router.patch("/settings", async (req, res): Promise<void> => {
     }
     const tokenVal = typeof dropboxToken === "string" ? dropboxToken.trim() : "";
     await upsertSetting(SETTING_DROPBOX_TOKEN, tokenVal);
+    resetDropboxConnection();
     logger.info({ hasToken: tokenVal.length > 0 }, "Settings updated: dropbox token");
   }
 
@@ -124,6 +127,7 @@ router.get("/settings/dropbox-status", async (_req, res): Promise<void> => {
           }
         );
 
+    await checkDropboxResponse(response);
     if (response.ok) {
       res.json(
         GetDropboxStatusResponse.parse({
@@ -164,11 +168,12 @@ router.get("/settings/dropbox-status", async (_req, res): Promise<void> => {
       })
     );
   } catch (err) {
-    logger.warn({ err, folder }, "Dropbox connection check errored");
+    const authError = err instanceof DropboxAuthError;
+    if (!authError) logger.warn({ err, folder }, "Dropbox connection check errored");
     res.json(
       GetDropboxStatusResponse.parse({
-        state: "error",
-        message: "Dropbox konnte momentan nicht erreicht werden.",
+        state: authError ? "disconnected" : "error",
+        message: authError ? err.message : "Dropbox konnte momentan nicht erreicht werden.",
         folder,
         connectionMethod,
         checkedAt,

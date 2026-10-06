@@ -7,6 +7,7 @@ import { db, invoicesTable } from "@workspace/db";
 import { getDropboxFolder, getDropboxToken } from "../routes/settings";
 import { extractInvoiceFromPDF } from "./pdf-extractor";
 import { logger } from "./logger";
+import { assertDropboxConnection, checkDropboxResponse, DropboxAuthError, needsDropboxReconnect } from "./dropbox-connection";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_FILES_PER_SYNC = 100;
@@ -45,22 +46,23 @@ export async function dropboxPost(
   body: unknown,
   token: string | null
 ): Promise<Response> {
+  assertDropboxConnection();
   if (token) {
-    return fetch(`https://api.dropboxapi.com${endpoint}`, {
+    return checkDropboxResponse(await fetch(`https://api.dropboxapi.com${endpoint}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
-    });
+    }));
   }
   const connectors = new ReplitConnectors();
-  return connectors.proxy("dropbox", endpoint, {
+  return checkDropboxResponse(await connectors.proxy("dropbox", endpoint, {
     method: "POST",
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
-  });
+  }));
 }
 
 // ── List PDFs in a Dropbox folder ─────────────────────────────────────────────
@@ -111,6 +113,7 @@ export async function downloadDropboxFile(
   token?: string | null,
   signal?: AbortSignal
 ): Promise<Buffer> {
+  assertDropboxConnection();
   const resolvedToken = token !== undefined ? token : await getDropboxToken();
 
   if (resolvedToken) {
@@ -123,6 +126,7 @@ export async function downloadDropboxFile(
         "Dropbox-API-Arg": JSON.stringify({ path: pathDisplay }),
       },
     });
+    await checkDropboxResponse(res);
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`Dropbox download ${res.status}: ${text}`);
@@ -145,6 +149,7 @@ export async function downloadDropboxFile(
     signal
   );
 
+  await checkDropboxResponse(linkResponse);
   if (!linkResponse.ok) {
     const text = await linkResponse.text();
     throw new Error(`Dropbox get_temporary_link ${linkResponse.status}: ${text}`);
@@ -175,17 +180,12 @@ export interface CleanupResult {
 
 // ── Full sync: import new PDFs from Dropbox ───────────────────────────────────
 export async function syncDropbox(): Promise<SyncResult> {
+  assertDropboxConnection();
   const folder = await getDropboxFolder();
   const token  = await getDropboxToken();
   const result: SyncResult = { imported: 0, skipped: 0, errors: 0, folder };
 
-  let files: DropboxEntry[];
-  try {
-    files = await listDropboxPDFs(folder, token);
-  } catch (err) {
-    logger.error({ err }, "Dropbox list_folder failed");
-    throw err;
-  }
+  const files = await listDropboxPDFs(folder, token);
 
   logger.info({ count: files.length, folder }, "Dropbox: found PDF files");
 
@@ -229,6 +229,7 @@ export async function syncDropbox(): Promise<SyncResult> {
       result.imported++;
       logger.info({ filename: file.name }, "Dropbox: file imported");
     } catch (err) {
+      if (err instanceof DropboxAuthError) throw err;
       result.errors++;
       logger.error({ err, filename: file.name }, "Dropbox: failed to import file");
     }
@@ -240,6 +241,7 @@ export async function syncDropbox(): Promise<SyncResult> {
 
 // ── Cleanup: remove DB records for files deleted from Dropbox ─────────────────
 export async function cleanupDropbox(): Promise<CleanupResult> {
+  assertDropboxConnection();
   const folder = await getDropboxFolder();
   const token  = await getDropboxToken();
 
@@ -268,15 +270,22 @@ export async function cleanupDropbox(): Promise<CleanupResult> {
 
 // ── Auto-poller ───────────────────────────────────────────────────────────────
 export function startDropboxPoller(): void {
-  syncDropbox().catch((err) =>
-    logger.error({ err }, "Dropbox: initial sync failed")
-  );
-
-  setInterval(() => {
-    syncDropbox().catch((err) =>
-      logger.error({ err }, "Dropbox: scheduled sync failed")
-    );
-  }, POLL_INTERVAL_MS);
+  let running = false;
+  const poll = async () => {
+    if (running || needsDropboxReconnect()) return;
+    running = true;
+    try {
+      await syncDropbox();
+    } catch (err) {
+      if (err instanceof DropboxAuthError) {
+        logger.warn({ code: err.code }, "Dropbox: reconnect required; automatic sync paused");
+      } else {
+        logger.error({ err }, "Dropbox: scheduled sync failed");
+      }
+    } finally { running = false; }
+  };
+  void poll();
+  setInterval(() => void poll(), POLL_INTERVAL_MS);
 
   logger.info({ intervalMs: POLL_INTERVAL_MS }, "Dropbox poller started");
 }

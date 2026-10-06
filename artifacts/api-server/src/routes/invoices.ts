@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
 import { syncDropbox, cleanupDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
+import { DropboxAuthError } from "../lib/dropbox-connection";
 import { logger } from "../lib/logger";
 import { createReextractJob, readReextractJob, commitReextractJob, failReextractJob } from "../lib/reextract-jobs";
 import {
@@ -339,9 +340,12 @@ router.post("/invoices/bulk-delete", async (req, res): Promise<void> => {
 // POST /invoices/dropbox-sync
 router.post("/invoices/dropbox-sync", async (req, res): Promise<void> => {
   try {
-    const result = await cleanupDropbox();
+    const result = await syncDropbox();
     res.json(result);
   } catch (err) {
+    if (err instanceof DropboxAuthError) {
+      res.status(409).json({ error: err.message, code: err.code }); return;
+    }
     req.log.error({ err }, "Dropbox sync failed");
     res.status(500).json({ error: "Dropbox-Sync fehlgeschlagen" });
   }
@@ -353,6 +357,9 @@ router.post("/invoices/dropbox-cleanup", async (req, res): Promise<void> => {
     const result = await cleanupDropbox();
     res.json(result);
   } catch (err) {
+    if (err instanceof DropboxAuthError) {
+      res.status(409).json({ error: err.message, code: err.code }); return;
+    }
     req.log.error({ err }, "Dropbox cleanup failed");
     res.status(500).json({ error: "Dropbox-Bereinigung fehlgeschlagen" });
   }
