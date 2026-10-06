@@ -3,12 +3,12 @@ import { spawn } from "node:child_process";
 import { build } from "esbuild";
 
 const outputDirectory = new URL("./.test-dist/", import.meta.url);
-const outputFile = new URL("pdf-extractor.test.mjs", outputDirectory);
+const outputFile = new URL("tests.mjs", outputDirectory);
 
 await rm(outputDirectory, { force: true, recursive: true });
 await build({
   bundle: true,
-  entryPoints: [new URL("./src/lib/pdf-extractor.test.ts", import.meta.url).pathname],
+  entryPoints: [new URL("./test-entry.ts", import.meta.url).pathname],
   format: "esm",
   outfile: outputFile.pathname,
   packages: "external",
@@ -28,7 +28,11 @@ await cp(
 const result = await new Promise((resolve, reject) => {
   const child = spawn(
     process.execPath,
-    ["--enable-source-maps", "--test", outputFile.pathname],
+    [
+      "--enable-source-maps",
+      "--test",
+      outputFile.pathname,
+    ],
     { stdio: "inherit" }
   );
   child.on("error", reject);

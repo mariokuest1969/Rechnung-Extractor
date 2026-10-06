@@ -1,4 +1,5 @@
 import { Invoice } from "@workspace/api-client-react";
+import { POSITION_EXPORT_HEADERS, createPositionExportRows } from "./position-export";
 
 function downloadCSV(headers: string[], rows: unknown[][], filename: string) {
   const csvContent = [
@@ -54,42 +55,12 @@ export function exportInvoicesToCSV(invoices: Invoice[]) {
 }
 
 export function exportInvoicePositionsToCSV(invoices: Invoice[]): number {
-  const rows = invoices.flatMap((invoice) =>
-    (invoice.positionen ?? []).map((position) => [
-      invoice.dateiname ?? "",
-      invoice.rechnungssteller ?? "",
-      invoice.datum ?? "",
-      invoice.rechnungsnummer ?? "",
-      position.positionsnummer ?? "",
-      position.beschreibung,
-      position.menge ?? "",
-      position.einheit ?? "",
-      position.einzelpreis ?? "",
-      position.steuersatz ?? "",
-      position.nettobetrag ?? "",
-      position.bruttobetrag ?? "",
-      invoice.waehrung ?? "EUR",
-    ])
-  );
+  const rows = createPositionExportRows(invoices);
 
   if (rows.length === 0) return 0;
 
   downloadCSV(
-    [
-      "Dateiname",
-      "Rechnungssteller",
-      "Datum",
-      "Rechnungsnummer",
-      "Positionsnummer",
-      "Beschreibung",
-      "Menge",
-      "Einheit",
-      "Einzelpreis",
-      "Steuersatz",
-      "Netto",
-      "Brutto",
-      "Währung",
-    ],
+    [...POSITION_EXPORT_HEADERS],
     rows,
     `rechnungspositionen_${new Date().toISOString().split("T")[0]}.csv`
   );

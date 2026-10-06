@@ -68,8 +68,10 @@ import {
 } from "@/components/ui/select";
 import { exportInvoicePositionsToCSV, exportInvoicesToCSV } from "@/lib/csv";
 import { exportInvoicePositionsToXLSX, exportInvoicesToXLSX } from "@/lib/xlsx-export";
-
-const MAX_BULK_REEXTRACT_INVOICES = 20;
+import {
+  createBulkReextractBlock,
+  processSequentially,
+} from "@/lib/bulk-reextract";
 
 type BulkReextractResult = {
   id: number;
@@ -709,10 +711,10 @@ export function InvoiceTable() {
       return;
     }
 
-    const queue = selectedDropboxInvoices.slice(0, MAX_BULK_REEXTRACT_INVOICES);
-    if (selectedDropboxInvoices.length > MAX_BULK_REEXTRACT_INVOICES) {
+    const { queue, remainingIds } = createBulkReextractBlock(selectedDropboxInvoices);
+    if (remainingIds.size > 0) {
       toast.info(
-        `Zum Schutz vor Zeitüberschreitungen werden maximal ${MAX_BULK_REEXTRACT_INVOICES} Rechnungen pro Durchlauf verarbeitet.`
+        `Zum Schutz vor Zeitüberschreitungen werden maximal ${queue.length} Rechnungen pro Durchlauf verarbeitet.`
       );
     }
 
@@ -721,33 +723,41 @@ export function InvoiceTable() {
     setBulkReextractProgress({ completed: 0, total: queue.length });
 
     const results: BulkReextractResult[] = [];
-    for (const invoice of queue) {
-      try {
+    await processSequentially(
+      queue,
+      async (invoice) => {
         const { extractedPositionCount: positionCount } = await runReextractJob(invoice.id);
-        results.push({
-          id: invoice.id,
-          filename: invoice.dateiname ?? `Rechnung ${invoice.id}`,
-          status: positionCount > 0 ? "success" : "empty",
-          message:
-            positionCount > 0
-              ? `${positionCount} Position${positionCount !== 1 ? "en" : ""} erkannt`
-              : "Keine Positionen erkannt",
-        });
-      } catch (error) {
-        results.push({
-          id: invoice.id,
-          filename: invoice.dateiname ?? `Rechnung ${invoice.id}`,
-          status: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Neu-Extraktion fehlgeschlagen",
-        });
-      } finally {
+        return { invoice, positionCount };
+      },
+      (outcome, index) => {
+        const invoice = queue[index]!;
+        if (outcome.status === "fulfilled") {
+          const positionCount = outcome.value.positionCount;
+          results.push({
+            id: invoice.id,
+            filename: invoice.dateiname ?? `Rechnung ${invoice.id}`,
+            status: positionCount > 0 ? "success" : "empty",
+            message:
+              positionCount > 0
+                ? `${positionCount} Position${positionCount !== 1 ? "en" : ""} erkannt`
+                : "Keine Positionen erkannt",
+          });
+        } else {
+          const error = outcome.reason;
+          results.push({
+            id: invoice.id,
+            filename: invoice.dateiname ?? `Rechnung ${invoice.id}`,
+            status: "error",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Neu-Extraktion fehlgeschlagen",
+          });
+        }
         setBulkReextractResults([...results]);
         setBulkReextractProgress({ completed: results.length, total: queue.length });
       }
-    }
+    );
 
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() }),
@@ -755,8 +765,7 @@ export function InvoiceTable() {
     ]);
     setIsBulkReextracting(false);
     if (selectedDropboxInvoices.length > queue.length) {
-      const processedIds = new Set(queue.map((invoice) => invoice.id));
-      setSelected((current) => new Set([...current].filter((id) => !processedIds.has(id))));
+      setSelected((current) => new Set([...current].filter((id) => remainingIds.has(id))));
       toast.info(
         `${selectedDropboxInvoices.length - queue.length} weitere Rechnung${selectedDropboxInvoices.length - queue.length !== 1 ? "en bleiben" : " bleibt"} für den nächsten Durchlauf ausgewählt.`
       );

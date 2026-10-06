@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { Invoice } from "@workspace/api-client-react";
+import { createPositionExportObjects } from "./position-export";
 
 export function exportInvoicesToXLSX(invoices: Invoice[]) {
   const rows = invoices.map((inv) => ({
@@ -50,23 +51,7 @@ export function exportInvoicesToXLSX(invoices: Invoice[]) {
 }
 
 export function exportInvoicePositionsToXLSX(invoices: Invoice[]): number {
-  const rows = invoices.flatMap((invoice) =>
-    (invoice.positionen ?? []).map((position) => ({
-      Dateiname: invoice.dateiname ?? "",
-      Rechnungssteller: invoice.rechnungssteller ?? "",
-      Datum: invoice.datum ?? "",
-      Rechnungsnummer: invoice.rechnungsnummer ?? "",
-      Positionsnummer: position.positionsnummer ?? "",
-      Beschreibung: position.beschreibung,
-      Menge: position.menge ?? "",
-      Einheit: position.einheit ?? "",
-      Einzelpreis: position.einzelpreis ?? "",
-      "MwSt %": position.steuersatz ?? "",
-      Netto: position.nettobetrag ?? "",
-      Brutto: position.bruttobetrag ?? "",
-      Währung: invoice.waehrung ?? "EUR",
-    }))
-  );
+  const rows = createPositionExportObjects(invoices);
 
   if (rows.length === 0) return 0;
 

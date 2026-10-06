@@ -13,18 +13,16 @@ import {
 import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
 import { syncDropbox, cleanupDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
 import { logger } from "../lib/logger";
+import {
+  getReextractErrorHttpStatus,
+  keepExistingPositionsWhenExtractionIsEmpty,
+  withReextractTimeout,
+} from "../lib/reextract";
 
 const router: IRouter = Router();
 const REEXTRACT_TIMEOUT_MS = 70_000;
 const REEXTRACT_JOB_TTL_MS = 30 * 60_000;
 const REEXTRACT_DB_LOCK_TIMEOUT_MS = 2_000;
-
-class ReextractTimeoutError extends Error {
-  constructor() {
-    super("Zeitlimit für die Neu-Extraktion überschritten");
-    this.name = "ReextractTimeoutError";
-  }
-}
 
 function isDatabaseTimeout(error: unknown): boolean {
   return (
@@ -42,7 +40,7 @@ type ReextractJob =
       invoice: ReturnType<typeof toApiInvoice>;
       extractedPositionCount: number;
     }
-  | { status: "error"; createdAt: number; error: string };
+  | { status: "error"; createdAt: number; error: string; httpStatus: number };
 
 const reextractJobs = new Map<string, ReextractJob>();
 
@@ -91,37 +89,24 @@ function pruneReextractJobs(): void {
 }
 
 async function runReextractJob(jobId: string, id: number): Promise<void> {
-  const controller = new AbortController();
-  let timeout: NodeJS.Timeout | undefined;
   try {
     const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
     if (!inv) throw new Error("Rechnung nicht gefunden");
     if (!inv.dropboxFileId) throw new Error("Diese Rechnung hat keine Dropbox-Datei");
 
-    const extraction = (async () => {
+    const extracted = await withReextractTimeout(async (signal) => {
       const buffer = await downloadDropboxFile(
         inv.dropboxFileId!,
         undefined,
-        controller.signal
+        signal
       );
       return extractInvoiceFromPDF(
         buffer,
         inv.dateiname ?? inv.dropboxFileId!,
         undefined,
-        controller.signal
+        signal
       );
-    })();
-    const deadline = new Promise<never>((_, reject) => {
-      timeout = setTimeout(() => {
-        controller.abort();
-        reject(new ReextractTimeoutError());
-      }, REEXTRACT_TIMEOUT_MS);
-    });
-    const extracted = await Promise.race([extraction, deadline]);
-    if (timeout) {
-      clearTimeout(timeout);
-      timeout = undefined;
-    }
+    }, REEXTRACT_TIMEOUT_MS);
 
     const extractedPositionCount = extracted.positionen.length;
     const updated = await db.transaction(async (tx) => {
@@ -139,7 +124,10 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
         nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : inv.nettoBetrag,
         waehrung: extracted.waehrung ?? inv.waehrung,
         bemerkung: extracted.bemerkung ?? inv.bemerkung,
-        positionen: extractedPositionCount > 0 ? extracted.positionen : (inv.positionen ?? []),
+        positionen: keepExistingPositionsWhenExtractionIsEmpty(
+          extracted.positionen,
+          inv.positionen
+        ),
       }).where(eq(invoicesTable.id, id)).returning();
       return row!;
     });
@@ -152,18 +140,18 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
     });
   } catch (error) {
     logger.error({ err: error, id, jobId }, "Reextract job failed");
+    const httpStatus = getReextractErrorHttpStatus(error, isDatabaseTimeout);
     reextractJobs.set(jobId, {
       status: "error",
       createdAt: Date.now(),
+      httpStatus,
       error:
-        error instanceof ReextractTimeoutError || isDatabaseTimeout(error)
+        httpStatus === 504
           ? "Zeitlimit für die Neu-Extraktion überschritten"
           : error instanceof Error
             ? error.message
             : "Neu-Extraktion fehlgeschlagen",
     });
-  } finally {
-    if (timeout) clearTimeout(timeout);
   }
 }
 
@@ -391,7 +379,7 @@ router.get("/invoices/reextract-jobs/:jobId", (req, res): void => {
     res.status(404).json({ error: "Neu-Extraktionsauftrag nicht gefunden" });
     return;
   }
-  res.json(job);
+  res.status(job.status === "error" ? job.httpStatus : 200).json(job);
 });
 
 // POST /invoices/bulk-delete
