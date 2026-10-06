@@ -4,6 +4,7 @@ import { db, settingsTable } from "@workspace/db";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { GetDropboxStatusResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
+import { getDropboxOAuthToken } from "../lib/dropbox-oauth";
 
 const router: IRouter = Router();
 
@@ -46,6 +47,8 @@ export async function getDropboxFolder(): Promise<string> {
 }
 
 export async function getDropboxToken(): Promise<string | null> {
+  const oauthToken = await getDropboxOAuthToken();
+  if (oauthToken) return oauthToken;
   const val = await getSetting(SETTING_DROPBOX_TOKEN);
   return val || null;
 }
@@ -95,11 +98,12 @@ router.patch("/settings", async (req, res): Promise<void> => {
 // GET /settings/dropbox-status
 router.get("/settings/dropbox-status", async (_req, res): Promise<void> => {
   const folder = await getDropboxFolder();
-  const token = await getDropboxToken();
-  const connectionMethod = token ? "personal_token" : "replit_connector";
+  let connectionMethod = "personal_token";
   const checkedAt = new Date().toISOString();
 
   try {
+    const token = await getDropboxToken();
+    connectionMethod = token ? "personal_token" : "replit_connector";
     const body = JSON.stringify({ path: folder, recursive: false, limit: 1 });
     const response = token
       ? await fetch("https://api.dropboxapi.com/2/files/list_folder", {

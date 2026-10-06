@@ -345,13 +345,9 @@ router.get("/invoices/:id/dropbox-link", async (req, res): Promise<void> => {
   if (!inv) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   if (!inv.dropboxFileId) { res.status(400).json({ error: "Keine Dropbox-Datei verknüpft" }); return; }
   try {
-    const { ReplitConnectors } = await import("@replit/connectors-sdk");
-    const connectors = new ReplitConnectors();
-    const linkResponse = await connectors.proxy("dropbox", "/2/files/get_temporary_link", {
-      method: "POST",
-      body: JSON.stringify({ path: inv.dropboxFileId }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const { dropboxPost } = await import("../lib/dropbox-poller");
+    const { getDropboxToken } = await import("./settings");
+    const linkResponse = await dropboxPost("/2/files/get_temporary_link", { path: inv.dropboxFileId }, await getDropboxToken());
     if (!linkResponse.ok) { res.status(500).json({ error: "Dropbox-Link konnte nicht erstellt werden" }); return; }
     const { link } = await linkResponse.json() as { link: string };
     res.json({ url: link });

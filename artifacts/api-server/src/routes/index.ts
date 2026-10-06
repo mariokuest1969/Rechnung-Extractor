@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import healthRouter from "./health";
 import invoicesRouter from "./invoices";
 import settingsRouter from "./settings";
+import dropboxOAuthRouter from "./dropbox-oauth";
 import lieferantenRouter from "./lieferanten";
 import buchungskontenRouter from "./buchungskonten";
 
@@ -21,6 +22,7 @@ router.use(healthRouter);
 router.use(requireAuth);
 router.use(invoicesRouter);
 router.use(settingsRouter);
+router.use(dropboxOAuthRouter);
 router.use(lieferantenRouter);
 router.use(buchungskontenRouter);
 

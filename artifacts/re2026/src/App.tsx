@@ -5,6 +5,7 @@ import { shadcn } from "@clerk/themes";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
@@ -129,7 +130,7 @@ function HomeRedirect() {
   return (
     <>
       <Show when="signed-in">
-        <Redirect to="/app" />
+        <Redirect to={`/app${window.location.search}`} />
       </Show>
       <Show when="signed-out">
         <Landing />
@@ -198,6 +199,7 @@ function ClerkProviderWithRoutes() {
             <Route component={NotFound} />
           </Switch>
           <Toaster />
+          <SonnerToaster richColors />
         </TooltipProvider>
       </QueryClientProvider>
     </ClerkProvider>

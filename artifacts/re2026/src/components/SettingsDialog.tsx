@@ -4,6 +4,7 @@ import {
   useGetDropboxStatus,
   useGetSettings,
   useUpdateSettings,
+  getGetSettingsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -14,10 +15,6 @@ import {
   CheckCircle2,
   CircleAlert,
   RefreshCw,
-  ExternalLink,
-  KeyRound,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,12 +28,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DropboxAppConnection, useDropboxCallback } from "./DropboxAppConnection";
 
 export function SettingsDialog() {
   const [open, setOpen]             = useState(false);
   const [folder, setFolder]         = useState("");
-  const [token, setToken]           = useState("");
-  const [showToken, setShowToken]   = useState(false);
+  const callbackMessage = useDropboxCallback(() => setOpen(true));
   const queryClient = useQueryClient();
 
   const { data: settings, isLoading } = useGetSettings();
@@ -60,12 +57,10 @@ export function SettingsDialog() {
     mutation: {
       onSuccess: () => {
         toast.success("Einstellungen gespeichert");
-        queryClient.invalidateQueries({ queryKey: ["getSettings"] });
+        queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
         queryClient.invalidateQueries({
           queryKey: getGetDropboxStatusQueryKey(),
         });
-        setToken("");
-        setShowToken(false);
       },
       onError: () => toast.error("Fehler beim Speichern"),
     },
@@ -77,17 +72,13 @@ export function SettingsDialog() {
       toast.error("Bitte einen gültigen Dropbox-Pfad eingeben");
       return;
     }
-    const payload: { dropboxFolder: string; dropboxToken?: string | null } = {
+    const payload: { dropboxFolder: string } = {
       dropboxFolder: trimmedFolder,
     };
-    if (token !== "") {
-      payload.dropboxToken = token.trim() || null;
-    }
     updateMutation.mutate({ data: payload });
   };
 
   const isConnected = dropboxStatus?.state === "connected";
-  const tokenConfigured = settings?.dropboxTokenConfigured ?? false;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -112,7 +103,7 @@ export function SettingsDialog() {
           )}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Einstellungen</DialogTitle>
           <DialogDescription>
@@ -121,6 +112,9 @@ export function SettingsDialog() {
         </DialogHeader>
 
         <div className="space-y-5 py-2">
+          {callbackMessage && (
+            <p role="status" className="rounded-lg border bg-muted p-3 text-sm">{callbackMessage}</p>
+          )}
           <div
             className={`rounded-lg border p-3 ${
               isConnected
@@ -199,74 +193,7 @@ export function SettingsDialog() {
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="dropbox-token" className="flex items-center gap-1.5">
-              <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-              Dropbox Access Token
-              {tokenConfigured && (
-                <span className="ml-auto flex items-center gap-1 text-xs font-normal text-emerald-700">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Hinterlegt
-                </span>
-              )}
-            </Label>
-            <div className="relative">
-              <Input
-                id="dropbox-token"
-                type={showToken ? "text" : "password"}
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
-                placeholder={
-                  tokenConfigured
-                    ? "Neuen Token zum Ersetzen eingeben"
-                    : "Access Token eingeben"
-                }
-                className="pr-9 font-mono text-sm"
-                autoComplete="off"
-                spellCheck={false}
-                onKeyDown={(event) =>
-                  event.key === "Enter" && handleSave()
-                }
-              />
-              <button
-                type="button"
-                onClick={() => setShowToken((value) => !value)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                title={showToken ? "Token ausblenden" : "Token anzeigen"}
-              >
-                {showToken ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Verwenden Sie den generierten Access Token Ihrer Dropbox-App.
-              Der App Key allein kann nicht für Dateiabrufe verwendet werden.
-              Leer lassen, um den hinterlegten Token beizubehalten.
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-border bg-muted/30 p-3">
-            <p className="text-sm font-medium">Dropbox neu verbinden</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Öffnen Sie im Replit-Projekt den Bereich „Connectors“, wählen Sie
-              Dropbox und anschließend „Reconnect“. Anmeldung und Passwort
-              werden ausschließlich auf der sicheren Dropbox-Seite eingegeben
-              und niemals in RE2026 gespeichert.
-            </p>
-            <Button variant="link" size="sm" className="mt-1 h-auto px-0" asChild>
-              <a
-                href="https://docs.replit.com/replitai/managing-connectors"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Anleitung zum Neuverbinden
-                <ExternalLink className="ml-1 h-3.5 w-3.5" />
-              </a>
-            </Button>
-          </div>
+          <DropboxAppConnection />
         </div>
 
         <DialogFooter>
@@ -274,8 +201,6 @@ export function SettingsDialog() {
             variant="outline"
             onClick={() => {
               setOpen(false);
-              setToken("");
-              setShowToken(false);
             }}
           >
             Schließen
@@ -287,7 +212,7 @@ export function SettingsDialog() {
             {updateMutation.isPending && (
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
             )}
-            Speichern
+            Ordner speichern
           </Button>
         </DialogFooter>
       </DialogContent>

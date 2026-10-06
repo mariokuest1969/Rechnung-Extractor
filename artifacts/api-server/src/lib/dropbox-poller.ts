@@ -40,7 +40,7 @@ interface ListFolderResult {
 
 // ── Low-level Dropbox API call ────────────────────────────────────────────────
 // Uses a direct bearer token if provided, otherwise falls back to Replit connector.
-async function dropboxPost(
+export async function dropboxPost(
   endpoint: string,
   body: unknown,
   token: string | null

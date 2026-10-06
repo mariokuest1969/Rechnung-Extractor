@@ -19,6 +19,51 @@ tags:
   - name: buchungskonten
     description: Booking accounts
 paths:
+  /settings/dropbox-app:
+    get:
+      operationId: getDropboxApp
+      tags: [settings]
+      responses:
+        "200":
+          description: Non-secret Dropbox app configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DropboxAppInfo"
+  /settings/dropbox-authorize:
+    post:
+      operationId: authorizeDropboxApp
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DropboxAppInput"
+      responses:
+        "200":
+          description: Dropbox authorization URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DropboxAuthorization"
+  /settings/dropbox-complete:
+    post:
+      operationId: completeDropboxApp
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DropboxCallbackInput"
+      responses:
+        "200":
+          description: Connection saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DropboxAppInfo"
   /healthz:
     get:
       operationId: healthCheck
@@ -549,6 +594,38 @@ paths:
 
 components:
   schemas:
+    DropboxAppInfo:
+      type: object
+      required: [appKey, configured]
+      properties:
+        appKey:
+          type: string
+        configured:
+          type: boolean
+    DropboxAppInput:
+      type: object
+      required: [redirectUri]
+      properties:
+        appKey:
+          type: string
+        appSecret:
+          type: string
+        redirectUri:
+          type: string
+    DropboxAuthorization:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+    DropboxCallbackInput:
+      type: object
+      required: [state, code]
+      properties:
+        state:
+          type: string
+        code:
+          type: string
     HealthStatus:
       type: object
       properties:

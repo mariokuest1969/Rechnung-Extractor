@@ -5,6 +5,26 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+export interface DropboxAppInfo {
+  appKey: string;
+  configured: boolean;
+}
+
+export interface DropboxAppInput {
+  appKey?: string;
+  appSecret?: string;
+  redirectUri: string;
+}
+
+export interface DropboxAuthorization {
+  url: string;
+}
+
+export interface DropboxCallbackInput {
+  state: string;
+  code: string;
+}
+
 export interface HealthStatus {
   status: string;
   openaiConfigured: boolean;
@@ -273,14 +293,16 @@ export interface DropboxSyncResult {
 }
 
 export type ReextractJobStartedStatus = typeof ReextractJobStartedStatus[keyof typeof ReextractJobStartedStatus];
-export interface ErrorResponse {
-  error: string;
-}
 
 
 export const ReextractJobStartedStatus = {
   processing: 'processing',
 } as const;
+
+export interface ReextractJobStarted {
+  jobId: string;
+  status: ReextractJobStartedStatus;
+}
 
 export type ReextractJobStatus = {
   status: 'processing';
@@ -296,7 +318,7 @@ export type ReextractJobStatus = {
   error: string;
 };
 
-export interface ReextractJobStarted {
-  jobId: string;
-  status: ReextractJobStartedStatus;
+export interface ErrorResponse {
+  error: string;
 }
+
