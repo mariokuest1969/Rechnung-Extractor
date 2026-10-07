@@ -14,3 +14,9 @@ Treat the server encryption secret as persistent infrastructure: changing it req
 **Why:** Uncoordinated secret rotation would render saved authorizations unreadable.
 
 **How to apply:** Plan credential migration or reconnection before rotating the encryption secret; never store secret values in memory.
+
+OAuth regression tests must never read or overwrite the saved Dropbox connection.
+
+**Why:** The user explicitly required isolated token responses and a test store, without using the real connection.
+
+**How to apply:** Keep automated lifecycle checks isolated from workspace credentials and live persistence; real consent testing requires separate user authorization.
