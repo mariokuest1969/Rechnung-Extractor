@@ -4,6 +4,8 @@ import { once } from "node:events";
 import express from "express";
 import router from "../../src/routes/invoices";
 import { client } from "./store";
+import { ExtractPreviewResponse } from "@workspace/api-zod";
+import { extractPreviews } from "../../../re2026/src/lib/upload-preview";
 
 const app = express();
 app.use(express.json());
@@ -24,10 +26,10 @@ async function request(path = "", method = "GET", body?: unknown) {
   });
   return { status: response.status, body: response.status === 204 ? null : await response.json() };
 }
-async function upload(files: { content: string; type?: string }[]) {
+async function upload(files: { content: string; type?: string }[], path = "/upload") {
   const form = new FormData();
   for (const file of files) form.append("files", new Blob([file.content], { type: file.type ?? "application/pdf" }), "invoice.pdf");
-  const response = await fetch(url + "/upload", { method: "POST", body: form });
+  const response = await fetch(url + path, { method: "POST", body: form });
   return { status: response.status, body: await response.json() };
 }
 
@@ -61,6 +63,23 @@ test("invoice routes preserve existing data and atomically save validated upload
   assert.equal(pdf.body[0].positionen[0].beschreibung, "PDF position");
   const before = (await request()).body;
   assert.equal(before.length, 2);
+  // Same filename must not collapse results. A failed preview has no invoice data.
+  const mixed = await upload([{ content: "%PDF-valid" }, { content: "broken" }, { content: "%PDF-valid" }], "/extract-preview");
+  assert.equal(mixed.status, 200);
+  assert.equal(ExtractPreviewResponse.safeParse(mixed.body).success, true);
+  assert.deepEqual(mixed.body.map((p: any) => p.status), ["success", "error", "success"]);
+  assert.equal(mixed.body[0].bruttoBetrag, 119);
+  assert.equal(mixed.body[2].error, null);
+  assert.deepEqual(Object.keys(mixed.body[1]).sort(), ["dateiname", "error", "status"]);
+  assert.ok(mixed.body[1].error.includes("PDF"));
+  assert.equal((await request("/upload-confirmed", "POST", mixed.body)).status, 400);
+  assert.deepEqual((await request()).body, before);
+  const failed = await upload([{ content: "broken" }, { content: "broken" }], "/extract-preview");
+  assert.deepEqual(failed.body.map((p: any) => p.status), ["error", "error"]);
+  const retried = await upload([{ content: "%PDF-valid" }], "/extract-preview");
+  assert.equal(retried.body[0].status, "success");
+  assert.equal((await upload([], "/extract-preview")).status, 400);
+  assert.deepEqual((await request()).body, before);
   assert.deepEqual(before.find((r: any) => r.id === original.id), original);
   assert.deepEqual((await request("/stats")).body, {
     totalInvoices: 2, totalBrutto: 357, totalNetto: 300, totalSteuer: 57,
@@ -102,4 +121,35 @@ test("invoice routes preserve existing data and atomically save validated upload
   assert.equal((await request(`/${original.id}`)).body.bemerkung, "Edited");
   assert.equal((await request(`/${original.id}`, "DELETE")).status, 204);
   assert.equal((await request()).body.length, 1);
+});
+
+test("preview client turns transport and malformed responses into per-file errors", async () => {
+  const originalFetch = globalThis.fetch;
+  const files = [new File(["first"], "same.pdf"), new File(["second"], "same.pdf")];
+  try {
+    for (const response of [
+      new Response("unavailable", { status: 503 }),
+      Response.json([]),
+      Response.json([{ dateiname: "same.pdf" }, { dateiname: "same.pdf" }]),
+      new Response("not json"),
+    ]) {
+      globalThis.fetch = async () => response;
+      const result = await extractPreviews(files);
+      assert.equal(result.length, 2);
+      assert.ok(result.every(p => p.status === "error" && p.error));
+    }
+    globalThis.fetch = async () => { throw new TypeError("Network unavailable"); };
+    assert.ok((await extractPreviews(files)).every(p => p.status === "error"));
+    const expected = [
+      { dateiname: "same.pdf", status: "success", error: null, bruttoBetrag: 119 },
+      { dateiname: "same.pdf", status: "error", error: "Bitte erneut versuchen" },
+    ];
+    globalThis.fetch = async (_url, options) => {
+      assert.equal((options?.body as FormData).getAll("files").length, 2);
+      return Response.json(expected);
+    };
+    assert.deepEqual(await extractPreviews(files), expected);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

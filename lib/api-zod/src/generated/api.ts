@@ -299,10 +299,19 @@ export const UploadInvoicesResponse = zod.array(UploadInvoicesResponseItem)
 
 
 /**
- * Uploads PDFs and returns extracted data for review without persisting
+ * Returns one result per file in request order (including duplicate filenames). HTTP 200 can contain both successful previews and explicit extraction errors; failed entries must not be saved.
  * @summary Extract invoice data from PDF without saving
  */
+
+
+
+export const ExtractPreviewBody = zod.object({
+  "files": zod.array(zod.instanceof(File)).min(1)
+})
+
 export const ExtractPreviewResponseItem = zod.object({
+  "status": zod.enum(['success', 'error']),
+  "error": zod.string().nullable().describe('Safe user-facing error for failed extractions; null on success. Failed results contain no extracted invoice fields.'),
   "dateiname": zod.string(),
   "rechnungssteller": zod.string().nullish(),
   "datum": zod.string().nullish(),

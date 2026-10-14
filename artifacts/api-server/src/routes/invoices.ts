@@ -50,11 +50,18 @@ const receivePdfs: RequestHandler = (req, res, next) => {
   });
 };
 
-const confirmedInvoice = UpdateInvoiceBody.extend(ExtractPreviewResponseItem.shape);
+// Keep legacy confirmed uploads valid, but never accept a failed preview as an invoice.
+const confirmedInvoice = UpdateInvoiceBody.extend(ExtractPreviewResponseItem.omit({
+  status: true, error: true,
+}).shape).extend({
+  status: ExtractPreviewResponseItem.shape.status.extract(["success"]).optional(),
+  error: ExtractPreviewResponseItem.shape.error.refine(value => value === null).optional(),
+});
 const confirmedInvoices = confirmedInvoice.array().min(1);
 function toInsertInvoice(item: ReturnType<typeof confirmedInvoice.parse>): typeof invoicesTable.$inferInsert {
+  const { status: _status, error: _error, ...invoice } = item;
   return {
-    ...item,
+    ...invoice,
     bruttoBetrag: item.bruttoBetrag == null ? null : String(item.bruttoBetrag),
     nettoBetrag: item.nettoBetrag == null ? null : String(item.nettoBetrag),
     steuerBetrag: item.steuerBetrag == null ? null : String(item.steuerBetrag),
@@ -219,11 +226,11 @@ router.post("/invoices/extract-preview", receivePdfs, async (req, res): Promise<
   const previews: Record<string, unknown>[] = [];
   for (const file of files) {
     try {
-      const extracted = await extractInvoiceFromPDF(file.buffer, file.originalname);
-      previews.push({ dateiname: file.originalname, ...extracted });
+      const extracted = await extractInvoiceFromPDF(file.buffer, file.originalname, undefined, undefined, { strict: true });
+      previews.push({ ...extracted, dateiname: file.originalname, status: "success", error: null });
     } catch (err) {
       req.log.error({ err, filename: file.originalname }, "Preview extraction failed");
-      previews.push({ dateiname: file.originalname, rechnungssteller: null, datum: null, rechnungsnummer: null, bruttoBetrag: null, steuersatz: null, steuerBetrag: null, nettoBetrag: null, waehrung: "EUR", bemerkung: null, positionen: [] });
+      previews.push({ dateiname: file.originalname, status: "error", error: "PDF konnte nicht ausgelesen werden. Bitte erneut versuchen oder die Datei prüfen." });
     }
   }
   res.json(previews);

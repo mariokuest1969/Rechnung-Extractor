@@ -126,3 +126,22 @@ test("falls back to regex when structured extraction returns invalid JSON", asyn
   assert.equal(result.steuerBetrag, 19);
   assert.equal(result.waehrung, "EUR");
 });
+
+test("strict preview extraction rejects malformed PDFs instead of returning empty invoices", async () => {
+  await assert.rejects(extractInvoiceFromPDF(
+    Buffer.from("not a PDF"), "broken.pdf", undefined, undefined, { strict: true },
+  ));
+});
+
+test("strict preview extraction surfaces AI failures rather than silently using regex", async () => {
+  for (const available of [true, false]) {
+    await assert.rejects(extractInvoiceFromPDF(
+      await readMixedPdf(), "mixed.pdf", {
+        isOcrAvailable: () => true,
+        recognizeScannedImage: async () => "Gesamtbetrag: 119,00 EUR",
+        isAiExtractionAvailable: () => available,
+        createStructuredCompletion: async () => { throw new Error("simulated AI failure"); },
+      }, undefined, { strict: true },
+    ), available ? /simulated AI failure/ : /nicht verfügbar/);
+  }
+});

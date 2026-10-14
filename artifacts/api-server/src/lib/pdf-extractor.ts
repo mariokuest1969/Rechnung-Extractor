@@ -416,7 +416,8 @@ export async function extractInvoiceFromPDF(
   buffer: Buffer,
   filename: string,
   dependencies: InvoiceExtractionDependencies = defaultInvoiceExtractionDependencies,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: { strict?: boolean } = {},
 ): Promise<ExtractedInvoice> {
   let text = "";
   let pageCount = 0;
@@ -430,10 +431,12 @@ export async function extractInvoiceFromPDF(
     );
   } catch (err) {
     if (signal?.aborted || isAbortError(err)) throw err;
+    if (options.strict) throw err;
     logger.warn({ err, filename }, "PDF extraction failed, using empty text");
   }
 
   if (!text.trim()) {
+    if (options.strict) throw new Error("Kein Text aus PDF extrahierbar");
     return {
       rechnungssteller: null,
       datum: null,
@@ -460,12 +463,14 @@ export async function extractInvoiceFromPDF(
       );
     } catch (err) {
       if (signal?.aborted || isAbortError(err)) throw err;
+      if (options.strict) throw err;
       logger.warn(
         { err, filename },
         "Replit AI extraction failed, falling back to regex"
       );
     }
   } else {
+    if (options.strict) throw new Error("KI-Auslesung nicht verfügbar");
     logger.warn(
       { filename },
       "Replit AI integration unavailable, using regex extraction"

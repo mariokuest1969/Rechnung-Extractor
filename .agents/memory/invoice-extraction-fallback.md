@@ -5,6 +5,12 @@ description: Why invoice fields can look empty/garbage across the board, and how
 
 # Invoice AI extraction: silent regex fallback
 
+Upload previews must surface PDF parsing, empty-text, and AI extraction failures instead of using the historical silent fallback. Other import/re-extraction callers retain their existing fallback behavior unless explicitly changed.
+
+**Why:** A fallback presented as a successful preview allows users to unknowingly confirm empty or unreliable accounting data; changing every import path at once would broaden the scope and alter established behavior.
+
+**How to apply:** Keep preview extraction strict. When investigating other import paths, use the fallback diagnostics below rather than assuming they also surface errors.
+
 If extracted invoice fields (rechnungssteller, brutto, datum, rechnungsnummer)
 look empty or wrong across MANY invoices at once, the AI extractor most likely
 failed and silently fell back to a weak regex parser — it does NOT surface an

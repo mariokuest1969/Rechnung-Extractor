@@ -221,7 +221,26 @@ export interface DropboxLinkResponse {
   url: string;
 }
 
+export interface InvoicePdfSelection {
+  /** @minItems 1 */
+  files: Blob[];
+}
+
+export type InvoicePreviewStatus = typeof InvoicePreviewStatus[keyof typeof InvoicePreviewStatus];
+
+
+export const InvoicePreviewStatus = {
+  success: 'success',
+  error: 'error',
+} as const;
+
 export interface InvoicePreview {
+  status: InvoicePreviewStatus;
+  /**
+     * Safe user-facing error for failed extractions; null on success. Failed results contain no extracted invoice fields.
+     * @nullable
+     */
+  error: string | null;
   dateiname: string;
   /** @nullable */
   rechnungssteller?: string | null;

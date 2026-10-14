@@ -54,9 +54,12 @@ interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   previews: InvoicePreview[];
+  onSaved: () => void;
+  onRetry: (index: number) => Promise<void>;
+  retryingIndex: number | null;
 }
 
-export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
+export function UploadReviewDialog({ open, onOpenChange, previews, onSaved, onRetry, retryingIndex }: Props) {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<EditablePreview[]>(() => previews.map(toEditable));
   const [activeIdx, setActiveIdx] = useState(0);
@@ -65,17 +68,23 @@ export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
   const [lastPreviews, setLastPreviews] = useState(previews);
   if (previews !== lastPreviews) {
     setLastPreviews(previews);
-    setRows(previews.map(toEditable));
-    setActiveIdx(0);
+    // Only the retried entry changes identity. Preserve corrections on other files.
+    setRows(previous => previews.map((p, i) => p === lastPreviews[i] ? previous[i] : toEditable(p)));
   }
 
   const saveMutation = useMutation({
     mutationFn: async (data: EditablePreview[]) => {
+      if (retryingIndex !== null || previews.some(p => p.status !== "success")) {
+        throw new Error("Fehlgeschlagene Dateien müssen zuerst erneut ausgelesen werden.");
+      }
       const res = await fetch("/api/invoices/upload-confirmed", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          data.map((r) => ({
+          data.map((r, index) => ({
+            status: "success",
+            error: null,
+            positionen: previews[index].positionen,
             dateiname: r.dateiname,
             rechnungssteller: r.rechnungssteller || null,
             datum: r.datum || null,
@@ -95,7 +104,7 @@ export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
     onSuccess: (data: unknown[]) => {
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() });
-      onOpenChange(false);
+      onSaved();
       toast.success(`${data.length} Rechnung${data.length !== 1 ? "en" : ""} gespeichert`);
     },
     onError: () => toast.error("Fehler beim Speichern"),
@@ -109,6 +118,9 @@ export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
 
   const active = rows[activeIdx];
   if (!active) return null;
+  const failedCount = previews.filter(p => p.status !== "success").length;
+  const failed = previews[activeIdx].status !== "success";
+  const busy = saveMutation.isPending || retryingIndex !== null;
 
   const fieldLabel = (label: string, field: keyof EditablePreview, type = "text") => (
     <div>
@@ -125,12 +137,18 @@ export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={value => { if (!busy) onOpenChange(value); }}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Erkennungsmaske — Daten prüfen & korrigieren</DialogTitle>
         </DialogHeader>
 
+        {failedCount > 0 && (
+          <p role="alert" className="text-sm text-destructive">
+            {failedCount} von {rows.length} Dateien konnten nicht ausgelesen werden.
+            Speichern ist gesperrt, bis alle Dateien erfolgreich ausgelesen wurden.
+          </p>
+        )}
         {/* File tabs */}
         {rows.length > 1 && (
           <div className="flex gap-1 flex-wrap">
@@ -144,7 +162,9 @@ export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
                     : "border-border hover:bg-muted/40"
                 }`}
               >
-                {hasMissingFields(r) ? (
+                {previews[i].status !== "success" ? (
+                  <><AlertCircle className="h-3 w-3 text-destructive" /><span>Fehlgeschlagen</span></>
+                ) : hasMissingFields(r) ? (
                   <AlertCircle className="h-3 w-3 text-yellow-500" />
                 ) : (
                   <CheckCircle className="h-3 w-3 text-green-500" />
@@ -161,15 +181,26 @@ export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
         )}
 
         {/* Missing-field hint */}
-        {hasMissingFields(active) && (
+        {!failed && hasMissingFields(active) && (
           <div className="flex items-center gap-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/50 rounded px-3 py-2 text-xs text-yellow-800 dark:text-yellow-300">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Fehlende Pflichtfelder (gelb markiert) – bitte ausfüllen oder leer lassen.
           </div>
         )}
 
+        {failed && (
+          <div className="rounded border border-destructive/50 bg-destructive/5 p-4 space-y-3">
+            <p className="text-sm font-medium break-all">{active.dateiname}</p>
+            <p role="alert" className="text-sm text-destructive">{previews[activeIdx].error}</p>
+            <Button variant="outline" disabled={busy} onClick={() => void onRetry(activeIdx)}>
+              {retryingIndex === activeIdx && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {retryingIndex === activeIdx ? "Wird erneut ausgelesen…" : "Diese Datei erneut auslesen"}
+            </Button>
+          </div>
+        )}
+
         {/* Form */}
-        <div className="grid grid-cols-2 gap-3">
+        {!failed && <fieldset disabled={saveMutation.isPending} className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             {fieldLabel("Rechnungssteller *", "rechnungssteller")}
           </div>
@@ -183,10 +214,10 @@ export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
           <div className="col-span-2">
             {fieldLabel("Bemerkung", "bemerkung")}
           </div>
-        </div>
+        </fieldset>}
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>
             Abbrechen
           </Button>
           {activeIdx < rows.length - 1 && (
@@ -196,7 +227,7 @@ export function UploadReviewDialog({ open, onOpenChange, previews }: Props) {
           )}
           <Button
             onClick={() => saveMutation.mutate(rows)}
-            disabled={saveMutation.isPending}
+            disabled={busy || failedCount > 0}
           >
             {saveMutation.isPending ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Speichern…</>

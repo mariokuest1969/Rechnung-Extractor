@@ -38,6 +38,7 @@ import type {
   ErrorResponse,
   HealthStatus,
   Invoice,
+  InvoicePdfSelection,
   InvoicePreview,
   InvoiceStats,
   InvoiceUpdate,
@@ -1384,17 +1385,19 @@ export const getExtractPreviewUrl = () => {
 }
 
 /**
- * Uploads PDFs and returns extracted data for review without persisting
+ * Returns one result per file in request order (including duplicate filenames). HTTP 200 can contain both successful previews and explicit extraction errors; failed entries must not be saved.
  * @summary Extract invoice data from PDF without saving
  */
-export const extractPreview = async ( options?: RequestInit): Promise<InvoicePreview[]> => {
+export const extractPreview = async (invoicePdfSelection: InvoicePdfSelection, options?: RequestInit): Promise<InvoicePreview[]> => {
+    const formData = new FormData();
+invoicePdfSelection.files.forEach(value => formData.append(`files`, value));
 
   return customFetch<InvoicePreview[]>(getExtractPreviewUrl(),
   {
     ...options,
     method: 'POST'
-
-
+    ,
+    body: formData
   }
 );}
 
@@ -1402,8 +1405,8 @@ export const extractPreview = async ( options?: RequestInit): Promise<InvoicePre
 
 
 export const getExtractPreviewMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,{data: BodyType<InvoicePdfSelection>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,{data: BodyType<InvoicePdfSelection>}, TContext> => {
 
 const mutationKey = ['extractPreview'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -1415,10 +1418,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof extractPreview>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof extractPreview>>, {data: BodyType<InvoicePdfSelection>}> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  extractPreview(requestOptions)
+          return  extractPreview(data,requestOptions)
         }
 
 
@@ -1429,18 +1432,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ExtractPreviewMutationResult = NonNullable<Awaited<ReturnType<typeof extractPreview>>>
-
+    export type ExtractPreviewMutationBody = BodyType<InvoicePdfSelection>
     export type ExtractPreviewMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Extract invoice data from PDF without saving
  */
 export const useExtractPreview = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractPreview>>, TError,{data: BodyType<InvoicePdfSelection>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof extractPreview>>,
         TError,
-        void,
+        {data: BodyType<InvoicePdfSelection>},
         TContext
       > => {
       return useMutation(getExtractPreviewMutationOptions(options));

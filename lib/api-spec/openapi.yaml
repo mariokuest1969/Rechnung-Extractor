@@ -357,10 +357,16 @@ paths:
       operationId: extractPreview
       tags: [invoices]
       summary: Extract invoice data from PDF without saving
-      description: Uploads PDFs and returns extracted data for review without persisting
+      description: Returns one result per file in request order (including duplicate filenames). HTTP 200 can contain both successful previews and explicit extraction errors; failed entries must not be saved.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/InvoicePdfSelection"
       responses:
         "200":
-          description: Extracted invoice previews
+          description: Per-file extraction results, in upload order
           content:
             application/json:
               schema:
@@ -910,11 +916,30 @@ components:
         url:
           type: string
 
+    InvoicePdfSelection:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: binary
+
     InvoicePreview:
       type: object
       required:
         - dateiname
+        - status
+        - error
       properties:
+        status:
+          type: string
+          enum: [success, error]
+        error:
+          type: ["string", "null"]
+          description: Safe user-facing error for failed extractions; null on success. Failed results contain no extracted invoice fields.
         dateiname:
           type: string
         rechnungssteller:

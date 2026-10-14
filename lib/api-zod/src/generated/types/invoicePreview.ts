@@ -6,8 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { InvoicePosition } from './invoicePosition';
+import type { InvoicePreviewStatus } from './invoicePreviewStatus';
 
 export interface InvoicePreview {
+  status: InvoicePreviewStatus;
+  /**
+     * Safe user-facing error for failed extractions; null on success. Failed results contain no extracted invoice fields.
+     * @nullable
+     */
+  error: string | null;
   dateiname: string;
   /** @nullable */
   rechnungssteller?: string | null;

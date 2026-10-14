@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { UploadReviewDialog } from "./UploadReviewDialog";
+import { extractPreviews } from "@/lib/upload-preview";
 
 export function UploadZone() {
   const [isDragging, setIsDragging] = useState(false);
@@ -16,6 +17,7 @@ export function UploadZone() {
   const [previews, setPreviews] = useState<InvoicePreview[] | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [retryingIndex, setRetryingIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -25,37 +27,52 @@ export function UploadZone() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+    if (isExtracting || reviewOpen) return;
     const newFiles = Array.from(e.dataTransfer.files).filter(f => f.type === "application/pdf");
     if (newFiles.length === 0) { toast.error("Bitte nur PDF-Dateien hochladen."); return; }
     setFilesToUpload(prev => [...prev, ...newFiles]);
+    setPreviews(null);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isExtracting || reviewOpen) return;
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files).filter(f => f.type === "application/pdf");
       setFilesToUpload(prev => [...prev, ...newFiles]);
+      setPreviews(null);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const removeFile = (index: number) => setFilesToUpload(prev => prev.filter((_, i) => i !== index));
+  const removeFile = (index: number) => {
+    setFilesToUpload(prev => prev.filter((_, i) => i !== index));
+    setPreviews(null);
+  };
 
   // Step 1: Extract preview — open review dialog
   const startExtract = async () => {
     if (filesToUpload.length === 0) return;
+    if (previews) { setReviewOpen(true); return; }
     setIsExtracting(true);
     try {
-      const fd = new FormData();
-      filesToUpload.forEach(f => fd.append("files", f));
-      const res = await fetch("/api/invoices/extract-preview", { method: "POST", body: fd });
-      if (!res.ok) throw new Error("Extraktion fehlgeschlagen");
-      const data = await res.json() as InvoicePreview[];
+      const data = await extractPreviews(filesToUpload);
       setPreviews(data);
       setReviewOpen(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Fehler bei der Extraktion");
     } finally {
       setIsExtracting(false);
+    }
+  };
+
+  const retryFile = async (index: number) => {
+    if (retryingIndex !== null || previews?.[index]?.status !== "error") return;
+    setRetryingIndex(index);
+    try {
+      const [result] = await extractPreviews([filesToUpload[index]]);
+      setPreviews(previous => previous?.map((preview, i) => i === index ? result : preview) ?? null);
+    } finally {
+      setRetryingIndex(null);
     }
   };
 
@@ -78,7 +95,7 @@ export function UploadZone() {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => !isExtracting && !reviewOpen && fileInputRef.current?.click()}
         >
           <UploadCloud className="h-10 w-10 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium text-foreground">PDF-Rechnungen hierher ziehen</h3>
@@ -90,6 +107,7 @@ export function UploadZone() {
             className="hidden"
             ref={fileInputRef}
             onChange={handleFileSelect}
+            disabled={isExtracting || reviewOpen}
           />
         </div>
 
@@ -130,7 +148,7 @@ export function UploadZone() {
                 {isExtracting ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />KI extrahiert…</>
                 ) : (
-                  <><Eye className="mr-2 h-4 w-4" />Extrahieren & Prüfen</>
+                  <><Eye className="mr-2 h-4 w-4" />{previews ? "Vorschau öffnen" : "Extrahieren & Prüfen"}</>
                 )}
               </Button>
             </div>
@@ -141,8 +159,11 @@ export function UploadZone() {
       {previews && (
         <UploadReviewDialog
           open={reviewOpen}
-          onOpenChange={(o) => handleReviewClose(!o)}
+          onOpenChange={setReviewOpen}
+          onSaved={() => handleReviewClose(true)}
           previews={previews}
+          onRetry={retryFile}
+          retryingIndex={retryingIndex}
         />
       )}
     </>
