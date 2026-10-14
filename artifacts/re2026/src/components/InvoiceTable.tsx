@@ -417,7 +417,7 @@ function SortHeader({
 // Main InvoiceTable
 // ─────────────────────────────────────────────────────────────────────────────
 export function InvoiceTable() {
-  const { data: invoices, isLoading } = useListInvoices();
+  const { data: invoices, isLoading, isError, refetch, isFetching } = useListInvoices();
   const { data: lieferanten = [] } = useListLieferanten();
   const queryClient = useQueryClient();
   const { data: dropboxStatus } = useGetDropboxStatus({
@@ -790,14 +790,27 @@ export function InvoiceTable() {
     );
   }
 
-  if (!invoices || invoices.length === 0) {
+  if (isError || !invoices || invoices.length === 0) {
     return (
       <>{connectionNotice}
       <div className="bg-card rounded-lg border border-border p-12 text-center">
-        <h3 className="text-lg font-medium text-foreground mb-2">Keine Rechnungen vorhanden</h3>
+        <h3 className="text-lg font-medium text-foreground mb-2">
+          {isError ? "Rechnungen konnten nicht geladen werden" : "Keine Rechnungen vorhanden"}
+        </h3>
         <p className="text-muted-foreground text-sm">
-          {reconnectRequired ? "Laden Sie PDFs hoch oder verbinden Sie Dropbox erneut." : "Laden Sie PDFs hoch oder warten Sie auf den automatischen Dropbox-Scan."}
+          {isError ? "Beim Abrufen der Liste ist ein Fehler aufgetreten. Das bedeutet nicht, dass Ihre Rechnungen fehlen." : reconnectRequired ? "Laden Sie PDFs hoch oder verbinden Sie Dropbox erneut." : "Laden Sie PDFs hoch oder starten Sie den Dropbox-Import."}
         </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+            {isFetching && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+            Liste neu laden
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => syncMutation.mutate()}
+            disabled={reconnectRequired || syncMutation.isPending || cleanupMutation.isPending}>
+            {syncMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
+            Dropbox jetzt prüfen
+          </Button>
+        </div>
       </div>
       </>
     );
