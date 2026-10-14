@@ -1,4 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+cd "$(dirname "$0")/.."
 pnpm install --frozen-lockfile
-pnpm --filter db push
+pnpm --filter @workspace/db --fail-if-no-match run setup:dev

@@ -9,6 +9,8 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/db run setup:dev` — repeatable, non-interactive development schema setup, also run by `scripts/post-merge.sh`. Uses the exported Drizzle schema (no migration history exists), rejects production runtime markers, never passes `--force`, and fails if a conflict needs manual approval. Run before API job tests or the first server start; uses the workspace development `DATABASE_URL` only.
+- Server startup checks `reextract_jobs` read-only before starting maintenance. A missing table/column stops startup with setup instructions; it never creates tables in production. Production schema changes require the approved publishing flow.
 - Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack

@@ -2,6 +2,8 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startDropboxPoller } from "./lib/dropbox-poller";
 import { maintainReextractJobs } from "./lib/reextract-jobs";
+import { assertReextractSchema } from "./lib/reextract-schema";
+import { pool } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -17,7 +19,9 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
+async function start() {
+  await assertReextractSchema();
+  app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -32,4 +36,11 @@ app.listen(port, (err) => {
 
   // Start Dropbox background poller
   startDropboxPoller();
+  });
+}
+
+void start().catch(async (err) => {
+  logger.error({ err }, "Serverstart abgebrochen: Datenbankschema prüfen");
+  await pool.end();
+  process.exitCode = 1;
 });

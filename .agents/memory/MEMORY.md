@@ -3,3 +3,4 @@
 - [Dropbox setup preference](dropbox-setup.md) — user wants App Key and App Secret entered inside RE2026, not manual access tokens or a Replit connector.
 - [Test bundle resolution](test-bundle-resolution.md) — bundled workspace tests must resolve external dependencies from their owning package under pnpm isolation.
 - [Invoice upload atomicity](invoice-upload-atomicity.md) — upload batches must not silently skip failures, which hides missing invoices and makes whole-batch retries unsafe.
+- [Development setup guards](development-setup-guards.md) — REPLIT_ENVIRONMENT may say production inside a development task workspace; it is not a deployment indicator.

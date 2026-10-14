@@ -7,6 +7,25 @@ import { resolve } from "node:path";
 import { db, pool, reextractJobsTable as jobs } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import { createReextractJob, readReextractJob, commitReextractJob, failReextractJob, maintainReextractJobs } from "./reextract-jobs";
+import { assertReextractSchema } from "./reextract-schema";
+
+test("missing job schema gives actionable setup instructions, including wrapped database errors", async () => {
+  for (const code of ["42P01", "42703"]) {
+    await assert.rejects(
+      assertReextractSchema(async () => { throw { cause: { code } }; }),
+      /reextract_jobs.*setup:dev.*Produktion/,
+    );
+  }
+  const connectionError = new Error("connection unavailable");
+  await assert.rejects(
+    assertReextractSchema(async () => { throw connectionError; }),
+    (error) => error === connectionError,
+  );
+});
+
+test("configured job schema passes the read-only startup check", async () => {
+  await assertReextractSchema();
+});
 
 const ids: string[] = [];
 async function create() {
