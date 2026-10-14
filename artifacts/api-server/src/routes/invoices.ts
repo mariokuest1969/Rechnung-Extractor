@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
 import { eq, inArray, sql } from "drizzle-orm";
 import { db, invoicesTable } from "@workspace/db";
@@ -9,6 +9,7 @@ import {
   UpdateInvoiceBody,
   DeleteInvoiceParams,
   GetInvoiceStatsResponse,
+  ExtractPreviewResponseItem,
 } from "@workspace/api-zod";
 import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
 import { syncDropbox, cleanupDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
@@ -38,6 +39,41 @@ const upload = multer({
     else cb(new Error("Only PDF files are allowed"));
   },
 });
+
+const receivePdfs: RequestHandler = (req, res, next) => {
+  upload.array("files")(req, res, (error: unknown) => {
+    if (error) {
+      res.status(400).json({ error: "Nur PDF-Dateien bis 20 MB sind erlaubt" });
+      return;
+    }
+    next();
+  });
+};
+
+const confirmedInvoice = UpdateInvoiceBody.extend(ExtractPreviewResponseItem.shape);
+const confirmedInvoices = confirmedInvoice.array().min(1);
+function toInsertInvoice(item: ReturnType<typeof confirmedInvoice.parse>): typeof invoicesTable.$inferInsert {
+  return {
+    ...item,
+    bruttoBetrag: item.bruttoBetrag == null ? null : String(item.bruttoBetrag),
+    nettoBetrag: item.nettoBetrag == null ? null : String(item.nettoBetrag),
+    steuerBetrag: item.steuerBetrag == null ? null : String(item.steuerBetrag),
+    steuersatz: item.steuersatz == null ? null : String(item.steuersatz),
+    buchungskonto1Betrag: item.buchungskonto1Betrag == null ? null : String(item.buchungskonto1Betrag),
+    buchungskonto2Betrag: item.buchungskonto2Betrag == null ? null : String(item.buchungskonto2Betrag),
+    waehrung: item.waehrung ?? "EUR",
+    positionen: (item.positionen ?? []).map(p => ({
+      beschreibung: p.beschreibung,
+      positionsnummer: p.positionsnummer ?? null,
+      menge: p.menge ?? null,
+      einheit: p.einheit ?? null,
+      einzelpreis: p.einzelpreis ?? null,
+      steuersatz: p.steuersatz ?? null,
+      nettobetrag: p.nettobetrag ?? null,
+      bruttobetrag: p.bruttobetrag ?? null,
+    })),
+  };
+}
 
 function toApiInvoice(row: typeof invoicesTable.$inferSelect) {
   return {
@@ -125,8 +161,7 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
 router.get("/invoices", async (_req, res): Promise<void> => {
     const rows = await db
       .select()
-      .from(invoicesTable)
-      .where(inArray(invoicesTable.id, numericIds));
+      .from(invoicesTable);
   res.json(rows.map(toApiInvoice));
 });
 
@@ -134,8 +169,7 @@ router.get("/invoices", async (_req, res): Promise<void> => {
 router.get("/invoices/stats", async (_req, res): Promise<void> => {
     const rows = await db
       .select()
-      .from(invoicesTable)
-      .where(inArray(invoicesTable.id, numericIds));
+      .from(invoicesTable);
   const totalInvoices = rows.length;
   const totalBrutto = rows.reduce((s, r) => s + (r.bruttoBetrag != null ? parseFloat(r.bruttoBetrag) : 0), 0);
   const totalNetto = rows.reduce((s, r) => s + (r.nettoBetrag != null ? parseFloat(r.nettoBetrag) : 0), 0);
@@ -160,24 +194,26 @@ router.get("/invoices/stats", async (_req, res): Promise<void> => {
 });
 
 // POST /invoices/upload
-router.post("/invoices/upload", upload.array("files"), async (req, res): Promise<void> => {
+router.post("/invoices/upload", receivePdfs, async (req, res): Promise<void> => {
   const files = req.files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) { res.status(400).json({ error: "Keine PDF-Dateien hochgeladen" }); return; }
-  const created: ReturnType<typeof toApiInvoice>[] = [];
+  const values: (typeof invoicesTable.$inferInsert)[] = [];
   for (const file of files) {
     try {
       const extracted = await extractInvoiceFromPDF(file.buffer, file.originalname);
-  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
-      created.push(toApiInvoice(row));
+      values.push(toInsertInvoice(confirmedInvoice.parse({ ...extracted, dateiname: file.originalname })));
     } catch (err) {
       req.log.error({ err, filename: file.originalname }, "Failed to process PDF");
+      res.status(422).json({ error: "PDF konnte nicht verarbeitet werden; keine Rechnungen gespeichert", dateiname: file.originalname });
+      return;
     }
   }
-  res.json(created);
+  const created = await db.insert(invoicesTable).values(values).returning();
+  res.json(created.map(toApiInvoice));
 });
 
 // POST /invoices/extract-preview — extract without saving
-router.post("/invoices/extract-preview", upload.array("files"), async (req, res): Promise<void> => {
+router.post("/invoices/extract-preview", receivePdfs, async (req, res): Promise<void> => {
   const files = req.files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) { res.status(400).json({ error: "Keine PDF-Dateien hochgeladen" }); return; }
   const previews: Record<string, unknown>[] = [];
@@ -195,14 +231,10 @@ router.post("/invoices/extract-preview", upload.array("files"), async (req, res)
 
 // POST /invoices/upload-confirmed — save pre-reviewed invoice data
 router.post("/invoices/upload-confirmed", async (req, res): Promise<void> => {
-  const body = UpdateInvoiceBody.safeParse(req.body);
-  if (!Array.isArray(body) || body.length === 0) { res.status(400).json({ error: "Keine Daten" }); return; }
-  const created: ReturnType<typeof toApiInvoice>[] = [];
-  for (const item of body as Record<string, unknown>[]) {
-  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
-    if (row) created.push(toApiInvoice(row));
-  }
-  res.json(created);
+  const body = confirmedInvoices.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const created = await db.insert(invoicesTable).values(body.data.map(toInsertInvoice)).returning();
+  res.json(created.map(toApiInvoice));
 });
 
 // PATCH /invoices/bulk-update
@@ -368,18 +400,18 @@ router.post("/invoices/dropbox-cleanup", async (req, res): Promise<void> => {
 // GET /invoices/:id
 router.get("/invoices/:id", async (req, res): Promise<void> => {
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const params = DeleteInvoiceParams.safeParse({ id: parseInt(rawId, 10) });
-  if (!params.success) { res.status(400).json({ error: "Ungültige ID" }); return; }
-  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
+  const params = GetInvoiceParams.safeParse({ id: rawId });
+  if (!params.success || !Number.isSafeInteger(params.data.id) || params.data.id <= 0) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const [row] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
   if (!row) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   res.json(toApiInvoice(row));
 });
 
-// DELETE /invoices/:id
-router.delete("/invoices/:id", async (req, res): Promise<void> => {
+// PATCH /invoices/:id
+router.patch("/invoices/:id", async (req, res): Promise<void> => {
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const params = DeleteInvoiceParams.safeParse({ id: parseInt(rawId, 10) });
-  if (!params.success) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const params = UpdateInvoiceParams.safeParse({ id: rawId });
+  if (!params.success || !Number.isSafeInteger(params.data.id) || params.data.id <= 0) { res.status(400).json({ error: "Ungültige ID" }); return; }
   const body = UpdateInvoiceBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
   const update: Record<string, unknown> = {};
@@ -403,7 +435,7 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
   if (d.buchungskonto2Betrag !== undefined) update.buchungskonto2Betrag = d.buchungskonto2Betrag != null ? String(d.buchungskonto2Betrag) : null;
   if (d.buchungstext !== undefined) update.buchungstext = d.buchungstext;
   if (Object.keys(update).length === 0) { res.status(400).json({ error: "Keine Felder" }); return; }
-  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
+  const [row] = await db.update(invoicesTable).set(update).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!row) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   res.json(toApiInvoice(row));
 });

@@ -1,0 +1,105 @@
+import assert from "node:assert/strict";
+import { test, after } from "node:test";
+import { once } from "node:events";
+import express from "express";
+import router from "../../src/routes/invoices";
+import { client } from "./store";
+
+const app = express();
+app.use(express.json());
+app.use((req, _res, next) => { req.log = { error() {} } as any; next(); });
+app.use(router);
+app.use((err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  res.status(err.status ?? 500).json({ error: "Request failed" });
+});
+const server = app.listen(0, "127.0.0.1");
+await once(server, "listening");
+const address = server.address() as { port: number };
+const url = `http://127.0.0.1:${address.port}/invoices`;
+after(async () => { server.close(); await client.end(); });
+async function request(path = "", method = "GET", body?: unknown) {
+  const response = await fetch(url + path, {
+    method, headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return { status: response.status, body: response.status === 204 ? null : await response.json() };
+}
+async function upload(files: { content: string; type?: string }[]) {
+  const form = new FormData();
+  for (const file of files) form.append("files", new Blob([file.content], { type: file.type ?? "application/pdf" }), "invoice.pdf");
+  const response = await fetch(url + "/upload", { method: "POST", body: form });
+  return { status: response.status, body: await response.json() };
+}
+
+test("invoice routes preserve existing data and atomically save validated uploads", async () => {
+  assert.deepEqual((await request()).body, []);
+  assert.equal((await request("/stats")).body.totalInvoices, 0);
+  const confirmed = await request("/upload-confirmed", "POST", [{
+    dateiname: "reviewed.pdf", rechnungssteller: "Reviewed supplier", bruttoBetrag: 238,
+    nettoBetrag: 200, steuerBetrag: 38, steuersatz: 19, freifeld1: "keep",
+    buchungskonto1Betrag: 0, positionen: [{ beschreibung: "Reviewed position", menge: 2 }],
+    id: 999, dropboxFileId: "must-not-be-accepted",
+  }]);
+  assert.equal(confirmed.status, 200);
+  const original = confirmed.body[0];
+  assert.notEqual(original.id, 999);
+  assert.equal(original.dropboxFileId, null);
+  assert.equal(original.bruttoBetrag, 238);
+  assert.equal(original.buchungskonto1Betrag, 0);
+  assert.equal(original.positionen[0].menge, 2);
+  assert.equal(original.freifeld1, "keep");
+  assert.ok(original.createdAt);
+  assert.deepEqual((await request(`/${original.id}`)).body, original);
+  assert.deepEqual((await request(`/${original.id}`)).body, original);
+  for (const id of ["0", "-1", "1abc", "1.2"]) assert.equal((await request(`/${id}`)).status, 400);
+  assert.equal((await request("/999999")).status, 404);
+
+  const pdf = await upload([{ content: "%PDF-1.7 test fixture" }]);
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.body[0].bruttoBetrag, 119);
+  assert.equal(pdf.body[0].dateiname, "invoice.pdf");
+  assert.equal(pdf.body[0].positionen[0].beschreibung, "PDF position");
+  const before = (await request()).body;
+  assert.equal(before.length, 2);
+  assert.deepEqual(before.find((r: any) => r.id === original.id), original);
+  assert.deepEqual((await request("/stats")).body, {
+    totalInvoices: 2, totalBrutto: 357, totalNetto: 300, totalSteuer: 57,
+    byWaehrung: [{ waehrung: "EUR", totalBrutto: 357, count: 2 }],
+  });
+
+  for (const body of [null, {}, [], [{}], [{ dateiname: 4 }], [
+    { dateiname: "valid.pdf" }, { dateiname: "invalid.pdf", bruttoBetrag: "bad" },
+  ], [{ dateiname: "bad.pdf", positionen: [{}] }]]) {
+    assert.equal((await request("/upload-confirmed", "POST", body)).status, 400);
+    assert.deepEqual((await request()).body, before);
+  }
+  assert.equal((await upload([])).status, 400);
+  assert.equal((await upload([{ content: "text", type: "text/plain" }])).status, 400);
+  assert.equal((await upload([{ content: "%PDF-valid" }, { content: "broken" }])).status, 422);
+  assert.deepEqual((await request()).body, before);
+  // A database failure in the second row must roll back the entire batch.
+  assert.equal((await request("/upload-confirmed", "POST", [
+    { dateiname: "valid.pdf", bruttoBetrag: 10 },
+    { dateiname: "overflow.pdf", bruttoBetrag: 1e15 },
+  ])).status, 500);
+  assert.deepEqual((await request()).body, before);
+  const batch = await request("/upload-confirmed", "POST", [
+    { dateiname: "minimal.pdf" },
+    { dateiname: "zero.pdf", bruttoBetrag: 0, waehrung: null },
+  ]);
+  assert.equal(batch.status, 200);
+  assert.equal(batch.body.length, 2);
+  assert.equal(batch.body[0].bruttoBetrag, null);
+  assert.deepEqual(batch.body[0].positionen, []);
+  assert.equal(batch.body[1].bruttoBetrag, 0);
+  assert.equal(batch.body[1].waehrung, "EUR");
+  for (const row of batch.body) assert.equal((await request(`/${row.id}`, "DELETE")).status, 204);
+
+  const edited = await request(`/${original.id}`, "PATCH", { bemerkung: "Edited", bruttoBetrag: 0 });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.bruttoBetrag, 0);
+  assert.equal((await request()).body.length, 2);
+  assert.equal((await request(`/${original.id}`)).body.bemerkung, "Edited");
+  assert.equal((await request(`/${original.id}`, "DELETE")).status, 204);
+  assert.equal((await request()).body.length, 1);
+});
