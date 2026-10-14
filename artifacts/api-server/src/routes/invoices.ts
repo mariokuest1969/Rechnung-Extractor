@@ -7,7 +7,6 @@ import {
   GetInvoiceParams,
   UpdateInvoiceParams,
   UpdateInvoiceBody,
-  DeleteInvoiceParams,
   GetInvoiceStatsResponse,
   ExtractPreviewResponseItem,
 } from "@workspace/api-zod";
@@ -15,6 +14,7 @@ import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
 import { syncDropbox, cleanupDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
 import { DropboxAuthError } from "../lib/dropbox-connection";
 import { logger } from "../lib/logger";
+import { parseInvoiceId, parseInvoiceIds } from "../lib/invoice-ids";
 import { createReextractJob, readReextractJob, commitReextractJob, failReextractJob } from "../lib/reextract-jobs";
 import {
   getReextractErrorHttpStatus,
@@ -246,9 +246,10 @@ router.post("/invoices/upload-confirmed", async (req, res): Promise<void> => {
 
 // PATCH /invoices/bulk-update
 router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
-  const { ids, fields } = req.body as { ids?: unknown; fields?: unknown };
-  if (!Array.isArray(ids) || ids.length === 0) {
-    res.status(400).json({ error: "ids muss ein nicht-leeres Array sein" }); return;
+  const { ids, fields } = (req.body ?? {}) as { ids?: unknown; fields?: unknown };
+  const numericIds = parseInvoiceIds(ids);
+  if (numericIds === null) {
+    res.status(400).json({ error: "ids muss ein nicht-leeres Array positiver sicherer Ganzzahlen sein" }); return;
   }
   if (typeof fields !== "object" || fields === null) {
     res.status(400).json({ error: "fields ist erforderlich" }); return;
@@ -276,14 +277,13 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   if (Object.keys(update).length === 0 && !hasSteuersatz) {
     res.status(400).json({ error: "Keine Felder zum Aktualisieren" }); return;
   }
-  const numericIds = (ids as unknown[]).map(Number).filter((n) => !isNaN(n));
-
   if (hasSteuersatz && rate !== null) {
     // Pro Rechnung: netto = brutto / (1 + satz/100), steuer = brutto - netto
     const rows = await db
       .select()
       .from(invoicesTable)
       .where(inArray(invoicesTable.id, numericIds));
+    let updated = 0;
     for (const inv of rows) {
       const perUpdate: Record<string, unknown> = { ...update, steuersatz: String(rate) };
       const brutto = inv.bruttoBetrag != null ? parseFloat(inv.bruttoBetrag) : null;
@@ -293,20 +293,21 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
         perUpdate.nettoBetrag = String(Math.round(netto * 100) / 100);
         perUpdate.steuerBetrag = String(Math.round(steuer * 100) / 100);
       }
-      await db.update(invoicesTable).set(perUpdate).where(eq(invoicesTable.id, inv.id));
+      const changed = await db.update(invoicesTable).set(perUpdate).where(eq(invoicesTable.id, inv.id)).returning({ id: invoicesTable.id });
+      updated += changed.length;
     }
-    res.json({ updated: rows.length });
+    res.json({ updated });
     return;
   }
 
-  await db.update(invoicesTable).set(update).where(inArray(invoicesTable.id, numericIds));
-  res.json({ updated: numericIds.length });
+  const changed = await db.update(invoicesTable).set(update).where(inArray(invoicesTable.id, numericIds)).returning({ id: invoicesTable.id });
+  res.json({ updated: changed.length });
 });
 
 // GET /invoices/:id/pdf — stream PDF inline from Dropbox
 router.get("/invoices/:id/pdf", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const id = parseInvoiceId(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Ungültige ID" }); return; }
   const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
   if (!inv) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   if (!inv.dropboxFileId) { res.status(400).json({ error: "Keine Dropbox-Datei verknüpft" }); return; }
@@ -326,8 +327,8 @@ router.get("/invoices/:id/pdf", async (req, res): Promise<void> => {
 
 // GET /invoices/:id/dropbox-link — return temporary Dropbox download URL
 router.get("/invoices/:id/dropbox-link", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const id = parseInvoiceId(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Ungültige ID" }); return; }
   const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
   if (!inv) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   if (!inv.dropboxFileId) { res.status(400).json({ error: "Keine Dropbox-Datei verknüpft" }); return; }
@@ -346,8 +347,8 @@ router.get("/invoices/:id/dropbox-link", async (req, res): Promise<void> => {
 
 // POST /invoices/:id/reextract — start re-extraction job
 router.post("/invoices/:id/reextract", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const id = parseInvoiceId(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Ungültige ID" }); return; }
   const jobId = randomUUID();
   await createReextractJob(jobId);
   void runReextractJob(jobId, id).catch((err) => {
@@ -367,13 +368,12 @@ router.get("/invoices/reextract-jobs/:jobId", async (req, res): Promise<void> =>
 
 // POST /invoices/bulk-delete
 router.post("/invoices/bulk-delete", async (req, res): Promise<void> => {
-  const { ids } = req.body as { ids?: unknown };
-  if (!Array.isArray(ids) || ids.length === 0) {
-    res.status(400).json({ error: "ids muss ein nicht-leeres Array sein" }); return;
+  const numericIds = parseInvoiceIds(req.body?.ids);
+  if (numericIds === null) {
+    res.status(400).json({ error: "ids muss ein nicht-leeres Array positiver sicherer Ganzzahlen sein" }); return;
   }
-  const numericIds = (ids as unknown[]).map(Number).filter((n) => !isNaN(n));
-  await db.delete(invoicesTable).where(inArray(invoicesTable.id, numericIds));
-  res.json({ deleted: numericIds.length });
+  const deleted = await db.delete(invoicesTable).where(inArray(invoicesTable.id, numericIds)).returning({ id: invoicesTable.id });
+  res.json({ deleted: deleted.length });
 });
 
 // POST /invoices/dropbox-sync
@@ -449,10 +449,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
 
 // DELETE /invoices/:id
 router.delete("/invoices/:id", async (req, res): Promise<void> => {
-  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const params = DeleteInvoiceParams.safeParse({ id: parseInt(rawId, 10) });
-  if (!params.success) { res.status(400).json({ error: "Ungültige ID" }); return; }
-  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
+  const id = parseInvoiceId(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Ungültige ID" }); return; }
+  const [row] = await db.delete(invoicesTable).where(eq(invoicesTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   res.sendStatus(204);
 });

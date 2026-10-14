@@ -6,6 +6,7 @@ import router from "../../src/routes/invoices";
 import { client } from "./store";
 import { ExtractPreviewResponse } from "@workspace/api-zod";
 import { extractPreviews } from "../../../re2026/src/lib/upload-preview";
+import { parseInvoiceId, parseInvoiceIds } from "../../src/lib/invoice-ids";
 
 const app = express();
 app.use(express.json());
@@ -121,6 +122,64 @@ test("invoice routes preserve existing data and atomically save validated upload
   assert.equal((await request(`/${original.id}`)).body.bemerkung, "Edited");
   assert.equal((await request(`/${original.id}`, "DELETE")).status, 204);
   assert.equal((await request()).body.length, 1);
+});
+
+test("invalid invoice IDs reject entire requests without changing invoices", async () => {
+  const created = await request("/upload-confirmed", "POST", [
+    { dateiname: "ids-a.pdf", bruttoBetrag: 119 },
+    { dateiname: "ids-b.pdf", bruttoBetrag: 238 },
+  ]);
+  const [a, b] = created.body;
+  const before = (await request()).body;
+  const invalid = [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, null, true, false, {}, [],
+    "", " ", `${a.id}abc`, `${a.id}.5`, "1e0", "0x1", "+1", "9007199254740993"];
+  for (const value of [...invalid, undefined, NaN, Infinity, -Infinity]) {
+    assert.equal(parseInvoiceId(value), null);
+    assert.equal(parseInvoiceIds([a.id, value]), null);
+  }
+  assert.equal(parseInvoiceId(Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
+  assert.equal(parseInvoiceId(String(Number.MAX_SAFE_INTEGER)), Number.MAX_SAFE_INTEGER);
+  for (const ids of [[], null, {}, "1", ...invalid.map(value => [a.id, value, b.id])]) {
+    for (const fields of [{ freifeld1: "must not change" }, { steuersatz: 7 }]) {
+      assert.equal((await request("/bulk-update", "PATCH", { ids, fields })).status, 400);
+      assert.deepEqual((await request()).body, before);
+    }
+    assert.equal((await request("/bulk-delete", "POST", { ids })).status, 400);
+    assert.deepEqual((await request()).body, before);
+  }
+  for (const body of [undefined, null, {}, []]) {
+    assert.equal((await request("/bulk-update", "PATCH", body)).status, 400);
+    assert.equal((await request("/bulk-delete", "POST", body)).status, 400);
+  }
+  for (const value of ["0", "-1", "1.5", `${a.id}abc`, "9007199254740993", "NaN", "Infinity"]) {
+    for (const [method, suffix] of [["GET", ""], ["PATCH", ""], ["DELETE", ""],
+      ["GET", "/pdf"], ["GET", "/dropbox-link"], ["POST", "/reextract"]]) {
+      assert.equal((await request(`/${value}${suffix}`, method, method === "PATCH" ? { freifeld1: "bad" } : undefined)).status, 400);
+      assert.deepEqual((await request()).body, before);
+    }
+  }
+
+  // Duplicates and nonexistent IDs must not inflate the affected-row counts.
+  const ids = [a.id, String(a.id), b.id, 999999];
+  const changed = await request("/bulk-update", "PATCH", { ids, fields: { freifeld1: "valid" } });
+  assert.equal(changed.status, 200);
+  assert.deepEqual(changed.body, { updated: 2 });
+  assert.equal((await request(`/${a.id}`)).body.freifeld1, "valid");
+  const taxed = await request("/bulk-update", "PATCH", { ids, fields: { steuersatz: 19 } });
+  assert.equal(taxed.status, 200);
+  assert.deepEqual(taxed.body, { updated: 2 });
+  assert.equal((await request(`/${a.id}`)).body.nettoBetrag, 100);
+  assert.equal((await request(`/${b.id}`)).body.nettoBetrag, 200);
+  for (const fields of [{ freifeld1: "missing" }, { steuersatz: 7 }]) {
+    assert.deepEqual((await request("/bulk-update", "PATCH", { ids: [999999], fields })).body, { updated: 0 });
+  }
+  assert.equal((await request("/999999", "DELETE")).status, 404);
+  assert.equal((await request("/999999/pdf")).status, 404);
+  assert.equal((await request("/999999/dropbox-link")).status, 404);
+  assert.deepEqual((await request("/bulk-delete", "POST", { ids })).body, { deleted: 2 });
+  assert.deepEqual((await request("/bulk-delete", "POST", { ids })).body, { deleted: 0 });
+  assert.equal((await request(`/${a.id}`)).status, 404);
+  assert.equal((await request(`/${b.id}`)).status, 404);
 });
 
 test("preview client turns transport and malformed responses into per-file errors", async () => {
