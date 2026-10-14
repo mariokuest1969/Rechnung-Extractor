@@ -442,6 +442,7 @@ export function InvoiceTable() {
   // ── Column visibility ──────────────────────────────────────────────────────
   const [hiddenCols, setHiddenCols] = useState<Set<ColId>>(loadHiddenCols);
   const [colMenuOpen, setColMenuOpen] = useState(false);
+  const [excelExporting, setExcelExporting] = useState(false);
   const colMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -822,20 +823,38 @@ export function InvoiceTable() {
       ? invoices.filter((invoice) => selected.has(invoice.id))
       : invoices;
 
-  const exportPositions = (format: "csv" | "xlsx") => {
-    const count =
-      format === "csv"
-        ? exportInvoicePositionsToCSV(exportInvoices)
-        : exportInvoicePositionsToXLSX(exportInvoices);
-    if (count === 0) {
-      toast.info(
-        "Noch keine Rechnungspositionen vorhanden. Bitte die gewünschten Dropbox-Rechnungen zuerst neu auslesen."
-      );
-      return;
+  const exportExcelInvoices = async () => {
+    setExcelExporting(true);
+    try {
+      await exportInvoicesToXLSX(invoices);
+    } catch {
+      toast.error("Excel-Export fehlgeschlagen. Bitte erneut versuchen.");
+    } finally {
+      setExcelExporting(false);
     }
-    toast.success(
-      `${count} Rechnungsposition${count !== 1 ? "en" : ""} exportiert`
-    );
+  };
+
+  const exportPositions = async (format: "csv" | "xlsx") => {
+    if (format === "xlsx") setExcelExporting(true);
+    try {
+      const count =
+        format === "csv"
+          ? exportInvoicePositionsToCSV(exportInvoices)
+          : await exportInvoicePositionsToXLSX(exportInvoices);
+      if (count === 0) {
+        toast.info(
+          "Noch keine Rechnungspositionen vorhanden. Bitte die gewünschten Dropbox-Rechnungen zuerst neu auslesen."
+        );
+        return;
+      }
+      toast.success(
+        `${count} Rechnungsposition${count !== 1 ? "en" : ""} exportiert`
+      );
+    } catch {
+      toast.error("Positionen-Export fehlgeschlagen. Bitte erneut versuchen.");
+    } finally {
+      if (format === "xlsx") setExcelExporting(false);
+    }
   };
 
   const sortHeaderProps = { sortField, sortDir, onSort: toggleSort };
@@ -871,13 +890,13 @@ export function InvoiceTable() {
             <Button variant="outline" size="sm" onClick={() => exportInvoicesToCSV(invoices)}>
               CSV Export
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportInvoicesToXLSX(invoices)}>
+            <Button variant="outline" size="sm" disabled={excelExporting} onClick={() => void exportExcelInvoices()}>
               Excel Export
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportPositions("csv")}>
+            <Button variant="outline" size="sm" onClick={() => void exportPositions("csv")}>
               Positionen CSV
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportPositions("xlsx")}>
+            <Button variant="outline" size="sm" disabled={excelExporting} onClick={() => void exportPositions("xlsx")}>
               Positionen Excel
             </Button>
 

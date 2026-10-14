@@ -1,8 +1,21 @@
-import * as XLSX from "xlsx";
-import { Invoice } from "@workspace/api-client-react";
+import writeExcelFile, { type SheetData } from "write-excel-file/browser";
+import type { Invoice } from "@workspace/api-client-react";
 import { createPositionExportObjects } from "./position-export";
 
-export function exportInvoicesToXLSX(invoices: Invoice[]) {
+function createSheetData(rows: Record<string, unknown>[], headers: string[]): SheetData {
+  return [
+    headers.map((value) => ({ value, type: String })),
+    ...rows.map((row) => headers.map((header) => {
+      const value = row[header] ?? "";
+      // Explicit string types prevent user-entered "=" values becoming formulas.
+      return typeof value === "number"
+        ? { value, type: Number }
+        : { value: String(value), type: String };
+    })),
+  ];
+}
+
+export function createInvoiceExcelSheet(invoices: Invoice[]) {
   const rows = invoices.map((inv) => ({
     Dateiname:         inv.dateiname ?? "",
     Rechnungssteller:  inv.rechnungssteller ?? "",
@@ -20,64 +33,49 @@ export function exportInvoicesToXLSX(invoices: Invoice[]) {
     "Feld 3":          inv.freifeld3 ?? "",
   }));
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-
-  // Column widths
-  ws["!cols"] = [
-    { wch: 36 }, // Dateiname
-    { wch: 28 }, // Rechnungssteller
-    { wch: 12 }, // Datum
-    { wch: 20 }, // Rechnungsnummer
-    { wch: 14 }, // Brutto
-    { wch: 8  }, // MwSt %
-    { wch: 14 }, // Steuer
-    { wch: 14 }, // Netto
-    { wch: 8  }, // Währung
-    { wch: 24 }, // Buchungstext
-    { wch: 24 }, // Bemerkung
-    { wch: 16 }, // Feld 1
-    { wch: 16 }, // Feld 2
-    { wch: 16 }, // Feld 3
+  // Fixed headers also produce a useful workbook when there are no invoices.
+  const headers = [
+    "Dateiname", "Rechnungssteller", "Datum", "Rechnungsnummer", "Brutto (€)",
+    "MwSt %", "Steuer (€)", "Netto (€)", "Währung", "Buchungstext",
+    "Bemerkung", "Feld 1", "Feld 2", "Feld 3",
   ];
-
-  // Freeze header row
-  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Rechnungen");
-
-  const filename = `rechnungen_export_${new Date().toISOString().split("T")[0]}.xlsx`;
-  XLSX.writeFile(wb, filename);
+  return {
+    data: createSheetData(rows, headers),
+    options: {
+      sheet: "Rechnungen",
+      stickyRowsCount: 1,
+      columns: [36, 28, 12, 20, 14, 8, 14, 14, 8, 24, 24, 16, 16, 16]
+        .map((width) => ({ width })),
+    },
+  };
 }
 
-export function exportInvoicePositionsToXLSX(invoices: Invoice[]): number {
+export async function exportInvoicesToXLSX(invoices: Invoice[]): Promise<void> {
+  const { data, options } = createInvoiceExcelSheet(invoices);
+  await writeExcelFile(data, options).toFile(
+    `rechnungen_export_${new Date().toISOString().split("T")[0]}.xlsx`
+  );
+}
+
+export function createPositionExcelSheet(invoices: Invoice[]) {
   const rows = createPositionExportObjects(invoices);
+  return {
+    count: rows.length,
+    data: createSheetData(rows, rows.length ? Object.keys(rows[0]) : []),
+    options: {
+      sheet: "Rechnungspositionen",
+      stickyRowsCount: 1,
+      columns: [34, 28, 12, 20, 16, 48, 10, 12, 14, 10, 14, 14, 10]
+        .map((width) => ({ width })),
+    },
+  };
+}
 
-  if (rows.length === 0) return 0;
-
-  const ws = XLSX.utils.json_to_sheet(rows);
-  ws["!cols"] = [
-    { wch: 34 },
-    { wch: 28 },
-    { wch: 12 },
-    { wch: 20 },
-    { wch: 16 },
-    { wch: 48 },
-    { wch: 10 },
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 10 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 10 },
-  ];
-  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Rechnungspositionen");
-  XLSX.writeFile(
-    wb,
+export async function exportInvoicePositionsToXLSX(invoices: Invoice[]): Promise<number> {
+  const { count, data, options } = createPositionExcelSheet(invoices);
+  if (count === 0) return 0;
+  await writeExcelFile(data, options).toFile(
     `rechnungspositionen_${new Date().toISOString().split("T")[0]}.xlsx`
   );
-  return rows.length;
+  return count;
 }
