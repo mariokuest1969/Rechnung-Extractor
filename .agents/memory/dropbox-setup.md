@@ -5,7 +5,7 @@ description: User's preferred Dropbox setup and credential-lifecycle constraint
 
 Use App Key and App Secret entered inside RE2026, followed by Dropbox authorization and automatic renewal, rather than asking for manual access tokens or reconnecting a Replit connector.
 
-**Why:** The user explicitly said the previous setup was too complicated and requested these inputs in the app.
+**Why:** The user explicitly said the previous setup was too complicated and requested these inputs in the app. They subsequently confirmed that the Dropbox connection and folder access work correctly with this setup.
 
 **How to apply:** Keep Dropbox setup self-service in settings. Explain the one-time Dropbox redirect URI registration rather than reverting to manual token generation.
 
