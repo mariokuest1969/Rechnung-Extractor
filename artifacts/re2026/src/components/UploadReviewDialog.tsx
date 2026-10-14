@@ -164,7 +164,7 @@ export function UploadReviewDialog({ open, onOpenChange, previews, onSaved, onRe
               >
                 {previews[i].status !== "success" ? (
                   <><AlertCircle className="h-3 w-3 text-destructive" /><span>Fehlgeschlagen</span></>
-                ) : hasMissingFields(r) ? (
+                ) : hasMissingFields(r) || !!previews[i].missingPages?.length ? (
                   <AlertCircle className="h-3 w-3 text-yellow-500" />
                 ) : (
                   <CheckCircle className="h-3 w-3 text-green-500" />
@@ -181,6 +181,17 @@ export function UploadReviewDialog({ open, onOpenChange, previews, onSaved, onRe
         )}
 
         {/* Missing-field hint */}
+        {!failed && !!previews[activeIdx].missingPages?.length && (
+          <div role="alert" className="flex items-start gap-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/50 rounded px-3 py-2 text-sm text-yellow-800 dark:text-yellow-300">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <p>
+              <strong>Achtung: Rechnungsdaten möglicherweise unvollständig.</strong>{" "}
+              Nicht lesbare PDF-Seiten: {previews[activeIdx].missingPages!.join(", ")}.
+              {" "}Die Daten der übrigen Seiten bleiben erhalten. Bitte prüfen Sie die
+              betroffenen Seiten im Original und ergänzen Sie fehlende Angaben vor dem Speichern.
+            </p>
+          </div>
+        )}
         {!failed && hasMissingFields(active) && (
           <div className="flex items-center gap-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/50 rounded px-3 py-2 text-xs text-yellow-800 dark:text-yellow-300">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />

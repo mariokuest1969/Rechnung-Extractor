@@ -309,7 +309,11 @@ export const ExtractPreviewBody = zod.object({
   "files": zod.array(zod.instanceof(File)).min(1)
 })
 
+
+
+
 export const ExtractPreviewResponseItem = zod.object({
+  "missingPages": zod.array(zod.number().min(1)).optional().describe('One-based PDF page numbers whose text could not be read. Successful results may still be incomplete; an empty or omitted list indicates no known unread pages.'),
   "status": zod.enum(['success', 'error']),
   "error": zod.string().nullable().describe('Safe user-facing error for failed extractions; null on success. Failed results contain no extracted invoice fields.'),
   "dateiname": zod.string(),

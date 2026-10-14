@@ -35,6 +35,7 @@ test("combines embedded text and mocked OCR from a mixed PDF", async () => {
     /\[Seite 3, OCR\]\s+BILDSEITE 3 Gesamtbetrag: 119,00 EUR/
   );
   assert.deepEqual(ocrPageNumbers, [2, 3]);
+  assert.deepEqual(result.missingPages, []);
 });
 
 test("continues with later pages when OCR fails on one page", async () => {
@@ -52,6 +53,7 @@ test("continues with later pages when OCR fails on one page", async () => {
   assert.equal(result.pageCount, 3);
   assert.match(result.text, /\[Seite 1\]\s+TEXTSEITE RE-NR MIX-42/);
   assert.doesNotMatch(result.text, /\[Seite 2, OCR\]/);
+  assert.deepEqual(result.missingPages, [2]);
   assert.match(
     result.text,
     /\[Seite 3, OCR\]\s+FOLGESEITE TROTZ OCR-FEHLER/
@@ -102,7 +104,7 @@ test("passes text from early and late PDF pages to structured extraction", async
   );
   assert.equal(structuredMaxTokens, 4096);
   assert.equal(structuredResponseFormat, "json_object");
-  assert.deepEqual(result, expectedInvoice);
+  assert.deepEqual(result, { ...expectedInvoice, missingPages: [] });
 });
 
 test("falls back to regex when structured extraction returns invalid JSON", async () => {
@@ -125,6 +127,39 @@ test("falls back to regex when structured extraction returns invalid JSON", asyn
   assert.equal(result.nettoBetrag, 100);
   assert.equal(result.steuerBetrag, 19);
   assert.equal(result.waehrung, "EUR");
+});
+
+test("partial mixed PDF preserves successful pages and reports missing pages through AI and regex extraction", async () => {
+  for (const aiAvailable of [true, false]) {
+    const result = await extractInvoiceFromPDF(await readMixedPdf(), "mixed.pdf", {
+      isOcrAvailable: () => true,
+      recognizeScannedImage: async (_image, pageNumber) => {
+        if (pageNumber === 2) throw new Error("private provider error");
+        return "Gesamtbetrag: 119,00 EUR";
+      },
+      isAiExtractionAvailable: () => aiAvailable,
+      createStructuredCompletion: async (request) => {
+        assert.match(request.messages[0].content, /TEXTSEITE RE-NR MIX-42/);
+        assert.match(request.messages[0].content, /\[Seite 3, OCR\]/);
+        assert.doesNotMatch(request.messages[0].content, /private provider error/);
+        return JSON.stringify({ rechnungsnummer: "MIX-42", bruttoBetrag: 119 });
+      },
+    }, undefined, { strict: aiAvailable });
+    assert.deepEqual(result.missingPages, [2]);
+    assert.equal(result.rechnungsnummer, "MIX-42");
+    assert.equal(result.bruttoBetrag, 119);
+  }
+});
+
+test("empty OCR and unavailable OCR report unread pages without losing embedded text", async () => {
+  for (const available of [true, false]) {
+    const result = await extractPages(await readMixedPdf(), "mixed.pdf", {
+      isOcrAvailable: () => available,
+      recognizeScannedImage: async () => "  ",
+    });
+    assert.deepEqual(result.missingPages, [2, 3]);
+    assert.match(result.text, /TEXTSEITE RE-NR MIX-42/);
+  }
 });
 
 test("strict preview extraction rejects malformed PDFs instead of returning empty invoices", async () => {

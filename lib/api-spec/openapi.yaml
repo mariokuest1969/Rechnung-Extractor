@@ -934,6 +934,12 @@ components:
         - status
         - error
       properties:
+        missingPages:
+          type: array
+          description: One-based PDF page numbers whose text could not be read. Successful results may still be incomplete; an empty or omitted list indicates no known unread pages.
+          items:
+            type: integer
+            minimum: 1
         status:
           type: string
           enum: [success, error]

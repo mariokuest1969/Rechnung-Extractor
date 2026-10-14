@@ -235,6 +235,11 @@ export const InvoicePreviewStatus = {
 } as const;
 
 export interface InvoicePreview {
+  /**
+     * One-based PDF page numbers whose text could not be read. Successful results may still be incomplete; an empty or omitted list indicates no known unread pages.
+     * @items.minimum 1
+     */
+  missingPages?: number[];
   status: InvoicePreviewStatus;
   /**
      * Safe user-facing error for failed extractions; null on success. Failed results contain no extracted invoice fields.

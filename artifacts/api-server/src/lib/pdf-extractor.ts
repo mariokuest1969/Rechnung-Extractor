@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { logger } from "./logger";
 
 export interface ExtractedInvoice {
+  missingPages?: number[];
   rechnungssteller: string | null;
   datum: string | null;
   rechnungsnummer: string | null;
@@ -160,7 +161,7 @@ export async function extractPages(
   filename: string,
   dependencies: PageExtractionDependencies = defaultPageExtractionDependencies,
   signal?: AbortSignal
-): Promise<{ text: string; pageCount: number }> {
+): Promise<{ text: string; pageCount: number; missingPages: number[] }> {
   signal?.throwIfAborted();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const document = await pdfjs.getDocument({
@@ -169,6 +170,7 @@ export async function extractPages(
   }).promise;
   const pageCount = document.numPages;
   const pageTexts: string[] = [];
+  const missingPages: number[] = [];
 
   try {
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
@@ -187,6 +189,7 @@ export async function extractPages(
         }
 
         if (!dependencies.isOcrAvailable()) {
+          missingPages.push(pageNumber);
           logger.warn(
             { filename, pageNumber },
             "PDF page has no embedded text and OCR is unavailable"
@@ -200,8 +203,10 @@ export async function extractPages(
           dependencies.recognizeScannedImage,
           signal
         );
-        if (ocrText) {
+        if (ocrText.trim()) {
           pageTexts.push(`[Seite ${pageNumber}, OCR]\n${ocrText}`);
+        } else {
+          missingPages.push(pageNumber);
         }
         logger.info(
           { filename, pageNumber, extractedCharacters: ocrText.length },
@@ -209,6 +214,7 @@ export async function extractPages(
         );
       } catch (err) {
         if (signal?.aborted || isAbortError(err)) throw err;
+        missingPages.push(pageNumber);
         logger.warn(
           { err, filename, pageNumber },
           "PDF page extraction failed, continuing with remaining pages"
@@ -219,7 +225,7 @@ export async function extractPages(
     await document.destroy();
   }
 
-  return { text: pageTexts.join("\n\n"), pageCount };
+  return { text: pageTexts.join("\n\n"), pageCount, missingPages };
 }
 
 function prepareTextForAI(text: string): string {
@@ -421,10 +427,12 @@ export async function extractInvoiceFromPDF(
 ): Promise<ExtractedInvoice> {
   let text = "";
   let pageCount = 0;
+  let missingPages: number[] = [];
   try {
     const parsed = await extractPages(buffer, filename, dependencies, signal);
     text = parsed.text;
     pageCount = parsed.pageCount;
+    missingPages = parsed.missingPages;
     logger.info(
       { filename, pageCount, extractedCharacters: text.length },
       "PDF text extracted"
@@ -448,6 +456,7 @@ export async function extractInvoiceFromPDF(
       waehrung: "EUR",
       bemerkung: `Kein Text extrahierbar aus ${filename}`,
       positionen: [],
+      missingPages,
     };
   }
 
@@ -455,12 +464,13 @@ export async function extractInvoiceFromPDF(
     try {
       signal?.throwIfAborted();
       logger.info({ filename, pageCount }, "Extracting invoice with Replit AI");
-      return await extractWithAI(
+      const extracted = await extractWithAI(
         text,
         pageCount,
         dependencies.createStructuredCompletion,
         signal
       );
+      return { ...extracted, missingPages };
     } catch (err) {
       if (signal?.aborted || isAbortError(err)) throw err;
       if (options.strict) throw err;
@@ -477,5 +487,5 @@ export async function extractInvoiceFromPDF(
     );
   }
 
-  return extractWithRegex(text);
+  return { ...extractWithRegex(text), missingPages };
 }
