@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Invoice } from "@workspace/api-client-react";
 import { createArticleSummary, type ArticleScope } from "@/lib/article-summary";
+import { createArticleExportTable, type ArticleView } from "@/lib/article-summary-export";
+import { exportArticleSummaryToCSV } from "@/lib/csv";
+import { exportArticleSummaryToXLSX } from "@/lib/xlsx-export";
 import { sortArticleGroups, sortArticleRows, type ArticleSort, type ArticleSortKey } from "@/lib/article-sort";
 import { formatDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Info, Layers, ListOrdered } from "lucide-react";
-
-type View = "grouped" | "rows";
+import { AlertTriangle, Download, Info, Layers, ListOrdered } from "lucide-react";
 
 const num = (v: number | null | undefined, digits = 2) =>
   typeof v === "number" && Number.isFinite(v)
@@ -52,7 +53,9 @@ export function ArticleSummaryDialog({
   const [scope, setScope] = useState<ArticleScope>("period");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [view, setView] = useState<View>("grouped");
+  const [view, setView] = useState<ArticleView>("grouped");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [groupSort, setGroupSort] = useState<ArticleSort>({ key: "description", direction: "asc" });
   const [rowSort, setRowSort] = useState<ArticleSort>({ key: "description", direction: "asc" });
 
@@ -89,6 +92,21 @@ export function ArticleSummaryDialog({
 
   const noMarked = scope === "selected" && selectedIds.length === 0;
   const empty = !summary.invalidRange && !noMarked && summary.rows.length === 0;
+  const exportDisabled = summary.invalidRange || noMarked || empty || exporting;
+  const download = async (format: "csv" | "xlsx") => {
+    if (exportDisabled) return;
+    setExportError("");
+    setExporting(true);
+    try {
+      const table = createArticleExportTable(summary, view);
+      if (format === "csv") exportArticleSummaryToCSV(table, view);
+      else await exportArticleSummaryToXLSX(table, view);
+    } catch {
+      setExportError("Der Export konnte nicht erstellt werden. Bitte erneut versuchen.");
+    } finally {
+      setExporting(false);
+    }
+  };
   const seg = (active: boolean) =>
     `px-3 py-1.5 text-xs rounded-md transition-colors inline-flex items-center gap-1.5 ${
       active ? "bg-background text-foreground shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"
@@ -162,6 +180,21 @@ export function ArticleSummaryDialog({
             </p>
           )}
         </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" disabled={exportDisabled}
+            onClick={() => void download("csv")} data-testid="button-article-export-csv">
+            <Download className="mr-1.5 h-3.5 w-3.5" /> CSV herunterladen
+          </Button>
+          <Button variant="outline" size="sm" disabled={exportDisabled}
+            onClick={() => void download("xlsx")} data-testid="button-article-export-xlsx">
+            <Download className="mr-1.5 h-3.5 w-3.5" /> Excel herunterladen
+          </Button>
+          <span className="text-xs text-muted-foreground" role="status">
+            {exporting ? "Export wird erstellt …" : "Exportiert die aktuelle Ansicht und den gewählten Umfang."}
+          </span>
+        </div>
+        {exportError && <p role="alert" className="text-sm text-destructive">{exportError}</p>}
 
         {view === "grouped" && !summary.invalidRange && !noMarked && !empty && (
           <p className="flex items-start gap-1.5 text-xs text-muted-foreground">

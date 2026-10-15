@@ -1,6 +1,27 @@
 import writeExcelFile, { type SheetData } from "write-excel-file/browser";
 import type { Invoice } from "@workspace/api-client-react";
 import { createPositionExportObjects } from "./position-export";
+import { articleExportFilename, type ArticleExportTable, type ArticleView } from "./article-summary-export";
+
+export function createArticleExcelSheet(table: ArticleExportTable, view: ArticleView) {
+  const rows = table.rows.map(row => Object.fromEntries(table.headers.map((header, i) => [header, row[i]])));
+  return {
+    data: createSheetData(rows, table.headers),
+    options: {
+      sheet: view === "grouped" ? "Gleiche Artikel" : "Einzelpositionen",
+      stickyRowsCount: 1,
+      columns: table.headers.map(header => ({
+        width: header === "Artikel" ? 48 : header === "Lieferant" || header.endsWith("Status") ? 30 : 18,
+      })),
+    },
+  };
+}
+
+export async function exportArticleSummaryToXLSX(table: ArticleExportTable, view: ArticleView): Promise<void> {
+  if (!table.rows.length) return;
+  const { data, options } = createArticleExcelSheet(table, view);
+  await writeExcelFile(data, options).toFile(`${articleExportFilename(view)}.xlsx`);
+}
 
 function createSheetData(rows: Record<string, unknown>[], headers: string[]): SheetData {
   return [

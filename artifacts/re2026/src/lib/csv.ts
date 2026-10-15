@@ -1,5 +1,11 @@
 import { Invoice } from "@workspace/api-client-react";
 import { POSITION_EXPORT_HEADERS, createPositionExportRows } from "./position-export";
+import { articleCsvCell, articleExportFilename, type ArticleExportTable, type ArticleView } from "./article-summary-export";
+
+export function exportArticleSummaryToCSV(table: ArticleExportTable, view: ArticleView): void {
+  if (!table.rows.length) return;
+  downloadCSV(table.headers, table.rows.map(row => row.map(articleCsvCell)), `${articleExportFilename(view)}.csv`);
+}
 
 function downloadCSV(headers: string[], rows: unknown[][], filename: string) {
   const csvContent = [
