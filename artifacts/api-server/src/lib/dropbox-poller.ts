@@ -7,6 +7,7 @@ import { db, invoicesTable } from "@workspace/db";
 import { getDropboxFolder, getDropboxToken } from "../routes/settings";
 import { extractInvoiceFromPDF } from "./pdf-extractor";
 import { logger } from "./logger";
+import { scanDropboxPDFs, planDropboxBatch, type DropboxEntry } from "./dropbox-scan";
 import { assertDropboxConnection, checkDropboxResponse, DropboxAuthError, needsDropboxReconnect } from "./dropbox-connection";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -23,20 +24,6 @@ async function waitWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Pro
       signal.removeEventListener("abort", abort);
     });
   });
-}
-
-interface DropboxEntry {
-  ".tag": string;
-  name: string;
-  id: string;
-  path_lower: string;
-  path_display: string;
-}
-
-interface ListFolderResult {
-  entries: DropboxEntry[];
-  has_more: boolean;
-  cursor: string;
 }
 
 // ── Low-level Dropbox API call ────────────────────────────────────────────────
@@ -70,41 +57,7 @@ async function listDropboxPDFs(
   folder: string,
   token: string | null
 ): Promise<DropboxEntry[]> {
-  let response = await dropboxPost(
-    "/2/files/list_folder",
-    { path: folder, recursive: true },
-    token
-  );
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Dropbox list_folder ${response.status}: ${text}`);
-  }
-
-  let data = (await response.json()) as ListFolderResult;
-  const entries = [...data.entries];
-
-  while (data.has_more) {
-    response = await dropboxPost(
-      "/2/files/list_folder/continue",
-      { cursor: data.cursor },
-      token
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `Dropbox list_folder/continue ${response.status}: ${text}`
-      );
-    }
-
-    data = (await response.json()) as ListFolderResult;
-    entries.push(...data.entries);
-  }
-
-  return entries.filter(
-    (e) => e[".tag"] === "file" && e.name.toLowerCase().endsWith(".pdf")
-  );
+  return scanDropboxPDFs(folder, (endpoint, body) => dropboxPost(endpoint, body, token));
 }
 
 // ── Download a Dropbox file by path ──────────────────────────────────────────
@@ -170,6 +123,7 @@ export interface SyncResult {
   imported: number;
   skipped: number;
   errors: number;
+  remaining: number;
   folder: string;
 }
 
@@ -179,36 +133,30 @@ export interface CleanupResult {
 }
 
 // ── Full sync: import new PDFs from Dropbox ───────────────────────────────────
-export async function syncDropbox(): Promise<SyncResult> {
+let activeSync: Promise<SyncResult> | null = null;
+export function syncDropbox(): Promise<SyncResult> {
+  if (!activeSync) activeSync = runDropboxSync().finally(() => { activeSync = null; });
+  return activeSync;
+}
+
+async function runDropboxSync(): Promise<SyncResult> {
   assertDropboxConnection();
   const folder = await getDropboxFolder();
   const token  = await getDropboxToken();
-  const result: SyncResult = { imported: 0, skipped: 0, errors: 0, folder };
+  const result: SyncResult = { imported: 0, skipped: 0, errors: 0, remaining: 0, folder };
 
   const files = await listDropboxPDFs(folder, token);
 
   logger.info({ count: files.length, folder }, "Dropbox: found PDF files");
 
-  if (files.length > MAX_FILES_PER_SYNC) {
-    throw new Error(
-      `Dropbox sync stopped: ${files.length} PDFs found below ${folder}. Configure a more specific invoice folder (maximum ${MAX_FILES_PER_SYNC} PDFs per sync).`
-    );
-  }
+  const existing = await db.select({ fileId: invoicesTable.dropboxFileId }).from(invoicesTable).where(isNotNull(invoicesTable.dropboxFileId));
+  const batch = planDropboxBatch(files, new Set(existing.flatMap(row => row.fileId ? [row.fileId] : [])), MAX_FILES_PER_SYNC);
+  result.skipped = batch.skipped;
+  result.remaining = batch.remaining;
 
-  for (const file of files) {
-    const existing = await db
-      .select({ id: invoicesTable.id })
-      .from(invoicesTable)
-      .where(eq(invoicesTable.dropboxFileId, file.id))
-      .limit(1);
-
-    if (existing.length > 0) {
-      result.skipped++;
-      continue;
-    }
-
+  for (const file of batch.files) {
     try {
-      const buffer    = await downloadDropboxFile(file.path_display, token);
+      const buffer    = await downloadDropboxFile(file.path_display);
       const extracted = await extractInvoiceFromPDF(buffer, file.name);
 
       await db.insert(invoicesTable).values({

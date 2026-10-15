@@ -9,6 +9,12 @@ Use App Key and App Secret entered inside RE2026, followed by Dropbox authorizat
 
 **How to apply:** Keep Dropbox setup self-service in settings. Explain the one-time Dropbox redirect URI registration rather than reverting to manual token generation.
 
+The user wants to enter only the main folder in settings and always include its descendant folders.
+
+**Why:** The user explicitly requested this to avoid configuring individual subfolders.
+
+**How to apply:** Preserve recursive discovery and pagination. Large folder trees should be processed in batches rather than rejected based on the total number of PDFs.
+
 Treat the server encryption secret as persistent infrastructure: changing it requires migrating encrypted Dropbox credentials or reconnecting Dropbox.
 
 **Why:** Uncoordinated secret rotation would render saved authorizations unreadable.

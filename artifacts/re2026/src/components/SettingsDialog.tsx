@@ -176,7 +176,7 @@ export function SettingsDialog() {
           <div className="space-y-2">
             <Label htmlFor="dropbox-folder" className="flex items-center gap-1.5">
               <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-              Dropbox-Ordner
+              Dropbox-Hauptordner
             </Label>
             {isLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
@@ -194,7 +194,8 @@ export function SettingsDialog() {
               />
             )}
             <p className="text-xs text-muted-foreground">
-              Pfad exakt wie in Dropbox angegeben (Groß-/Kleinschreibung beachten).
+              Nur den Hauptpfad eingeben. Alle Unterordner werden automatisch nach PDFs durchsucht.
+              Größere Bestände werden in mehreren Durchläufen mit bis zu 100 neuen Dateien importiert.
             </p>
           </div>
 

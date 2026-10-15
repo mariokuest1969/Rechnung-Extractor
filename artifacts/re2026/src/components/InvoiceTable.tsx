@@ -21,6 +21,7 @@ import { LieferantenDialog } from "./LieferantenDialog";
 import { BuchungsDialog } from "./BuchungsDialog";
 import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
 import { DropboxConnectionNotice } from "./DropboxConnectionNotice";
+import { ArticleSummaryDialog } from "./ArticleSummaryDialog";
 import { formatNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,6 +42,7 @@ import {
   Check,
   Eye,
   EyeOff,
+  ListTree,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -575,6 +577,7 @@ export function InvoiceTable() {
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
   const [lieferantenOpen, setLieferantenOpen] = useState(false);
+  const [articlesOpen, setArticlesOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [buchungsOpen, setBuchungsOpen] = useState(false);
   const [buchungsInvoice, setBuchungsInvoice] = useState<Invoice | null>(null);
@@ -630,7 +633,9 @@ export function InvoiceTable() {
       onSuccess: (data) => {
         queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetInvoiceStatsQueryKey() });
-        toast.success(`Dropbox-Sync: ${data.imported} neu importiert, ${data.skipped} bereits vorhanden`);
+        const message = `Dropbox-Sync: ${data.imported} neu importiert, ${data.skipped} bereits vorhanden, ${data.errors} Fehler${data.remaining ? `, ${data.remaining} weitere Dateien im nächsten Durchlauf` : ""}`;
+        if (data.errors) toast.warning(message);
+        else toast.success(message);
       },
       onError: (error) => handleDropboxError(error, "Dropbox-Sync fehlgeschlagen"),
     },
@@ -811,8 +816,15 @@ export function InvoiceTable() {
             {syncMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
             Dropbox jetzt prüfen
           </Button>
+          {!isError && (
+            <Button variant="outline" size="sm" onClick={() => setArticlesOpen(true)} data-testid="button-open-articles">
+              <ListTree className="mr-1 h-4 w-4" /> Artikelübersicht
+            </Button>
+          )}
         </div>
       </div>
+      <ArticleSummaryDialog open={articlesOpen} onOpenChange={setArticlesOpen}
+        invoices={invoices ?? []} selectedIds={Array.from(selected)} supplierNames={lieferantenMap} />
       </>
     );
   }
@@ -869,6 +881,9 @@ export function InvoiceTable() {
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => setLieferantenOpen(true)} title="Lieferantenverzeichnis">
               <Users className="h-4 w-4 mr-1" /> Lieferanten
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setArticlesOpen(true)} title="Artikelübersicht der erfassten Positionen" data-testid="button-open-articles">
+              <ListTree className="h-4 w-4 mr-1" /> Artikelübersicht
             </Button>
             <Button
               variant="outline" size="sm"
@@ -1427,6 +1442,8 @@ export function InvoiceTable() {
 
       {/* Other Dialogs */}
       <LieferantenDialog open={lieferantenOpen} onOpenChange={setLieferantenOpen} />
+      <ArticleSummaryDialog open={articlesOpen} onOpenChange={setArticlesOpen}
+        invoices={invoices ?? []} selectedIds={Array.from(selected)} supplierNames={lieferantenMap} />
       <BulkEditDialog
         open={bulkEditOpen}
         onOpenChange={setBulkEditOpen}

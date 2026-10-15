@@ -1,3 +1,5 @@
+- [Codegen compatibility](codegen-compatibility.md) — generator dependency upgrades can emit the wrong Zod major with pnpm catalog dependencies; regenerate and check shared libraries.
+- [Article aggregation](article-summary.md) — keep summary grouping conservative; row numbers are not product IDs, and missing values must remain visibly incomplete.
 - [Invoice AI extraction fallback](invoice-extraction-fallback.md) — empty/garbage invoice fields across many rows = AI extractor failed and silently used regex; check logs for 429/insufficient_quota. Dev & prod DBs are separate.
 - [AI job deadlines](ai-job-deadlines.md) — time out document extraction before persistence; publish terminal job state only after DB commit or rollback is final.
 - [Dropbox setup preference](dropbox-setup.md) — user wants App Key and App Secret entered inside RE2026, not manual access tokens or a Replit connector.

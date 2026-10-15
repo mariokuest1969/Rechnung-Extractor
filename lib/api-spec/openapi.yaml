@@ -1067,6 +1067,9 @@ components:
           type: integer
         errors:
           type: integer
+        remaining:
+          type: integer
+          description: New PDFs deferred to the next sync batch
         folder:
           type: string
 
