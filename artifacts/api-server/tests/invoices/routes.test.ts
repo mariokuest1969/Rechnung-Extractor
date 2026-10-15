@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { test, after } from "node:test";
+import { test, after, mock } from "node:test";
 import { once } from "node:events";
 import express from "express";
 import router from "../../src/routes/invoices";
-import { client } from "./store";
-import { ExtractPreviewResponse } from "@workspace/api-zod";
+import { client, db } from "./store";
+import { ExtractPreviewResponse, BulkUpdateInvoicesBody } from "@workspace/api-zod";
 import { extractPreviews } from "../../../re2026/src/lib/upload-preview";
 import { parseInvoiceId, parseInvoiceIds } from "../../src/lib/invoice-ids";
 import { previewDeadline } from "../../src/lib/preview-deadline";
@@ -181,6 +181,90 @@ test("invalid invoice IDs reject entire requests without changing invoices", asy
   assert.deepEqual((await request("/bulk-delete", "POST", { ids })).body, { deleted: 0 });
   assert.equal((await request(`/${a.id}`)).status, 404);
   assert.equal((await request(`/${b.id}`)).status, 404);
+});
+
+test("bulk field validation rejects the whole request before database access", async () => {
+  const created = await request("/upload-confirmed", "POST", [
+    { dateiname: "fields-a.pdf", bruttoBetrag: 119, freifeld1: "keep" },
+    { dateiname: "fields-b.pdf", bruttoBetrag: 238, freifeld1: "keep" },
+  ]);
+  assert.equal(created.status, 200);
+  const ids = created.body.map((row: any) => row.id);
+  const before = (await request()).body;
+  const invalidFields: unknown[] = [undefined, null, [], "", 42, true, {}, { steuersatz: null },
+    { freifeld1: "changed", unknown: "unsupported" }];
+  for (const key of ["rechnungssteller", "buchungskonto1", "buchungskonto2", "buchungstext",
+    "freifeld1", "freifeld2", "freifeld3"]) {
+    for (const value of [42, true, {}, []]) invalidFields.push({ freifeld1: "changed", [key]: value });
+  }
+  for (const key of ["steuersatz", "buchungskonto1Betrag", "buchungskonto2Betrag", "lieferantId"]) {
+    for (const value of ["19", "", " ", "NaN", "Infinity", true, false, {}, []]) {
+      invalidFields.push({ freifeld1: "changed", [key]: value });
+    }
+    // JSON.stringify maps nonfinite numbers to null; test the actual schema as well.
+    for (const value of [NaN, Infinity, -Infinity]) {
+      assert.equal(BulkUpdateInvoicesBody.shape.fields.safeParse({ [key]: value }).success, false);
+    }
+  }
+  for (const value of [-100, -1, 100.01, 1e100, 0.001, 19.999, 1e-7]) {
+    invalidFields.push({ steuersatz: value, freifeld1: "changed" });
+  }
+  for (const value of [0, -1, 1.5, 2147483648]) invalidFields.push({ lieferantId: value, freifeld1: "changed" });
+  for (const key of ["buchungskonto1Betrag", "buchungskonto2Betrag"]) {
+    for (const value of [-1e10, 1e10, 1e100, 0.001, -12.345, 1e-7]) {
+      invalidFields.push({ [key]: value, steuersatz: 19 });
+    }
+  }
+  const select = mock.method(db, "select");
+  const update = mock.method(db, "update");
+  try {
+    for (const fields of invalidFields) {
+      assert.equal((await request("/bulk-update", "PATCH", { ids, fields })).status, 400,
+        JSON.stringify(fields));
+    }
+    // Legal JSON number syntax can overflow JavaScript's finite number range.
+    for (const key of ["steuersatz", "buchungskonto1Betrag", "buchungskonto2Betrag"]) {
+      const response = await fetch(url + "/bulk-update", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: `{"ids":${JSON.stringify(ids)},"fields":{"${key}":1e400,"freifeld1":"changed"}}`,
+      });
+      assert.equal(response.status, 400);
+    }
+    assert.equal(select.mock.callCount(), 0);
+    assert.equal(update.mock.callCount(), 0);
+  } finally {
+    select.mock.restore();
+    update.mock.restore();
+  }
+  assert.deepEqual((await request()).body, before);
+
+  for (const rate of [0, 0.01, 7, 19, 19.99, 20.5, 100]) {
+    const result = await request("/bulk-update", "PATCH", { ids, fields: {
+      steuersatz: rate, buchungskonto1Betrag: -9999999999.99,
+      buchungskonto2Betrag: 9999999999.99, lieferantId: 2147483647,
+      rechnungssteller: "", buchungskonto1: "", buchungskonto2: null,
+      buchungstext: "valid", freifeld1: null, freifeld2: "", freifeld3: "valid",
+    } });
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, { updated: 2 });
+    const row = (await request(`/${ids[0]}`)).body;
+    assert.equal(row.steuersatz, rate);
+    assert.equal(row.nettoBetrag, Math.round(119 / (1 + rate / 100) * 100) / 100);
+    assert.equal(row.buchungskonto1Betrag, -9999999999.99);
+    assert.equal(row.buchungskonto2Betrag, 9999999999.99);
+    assert.equal(row.freifeld1, null);
+    assert.equal(row.rechnungssteller, "");
+  }
+  const cleared = await request("/bulk-update", "PATCH", { ids, fields: {
+    buchungskonto1Betrag: null, buchungskonto2Betrag: 0, lieferantId: null, steuersatz: null,
+  } });
+  assert.equal(cleared.status, 200);
+  const row = (await request(`/${ids[0]}`)).body;
+  assert.equal(row.buchungskonto1Betrag, null);
+  assert.equal(row.buchungskonto2Betrag, 0);
+  assert.equal(row.lieferantId, null);
+  assert.equal(row.steuersatz, 100); // Preserve the existing null-rate no-op semantics.
+  await request("/bulk-delete", "POST", { ids });
 });
 
 test("preview client turns transport and malformed responses into per-file errors", async () => {

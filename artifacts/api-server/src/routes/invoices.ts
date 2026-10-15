@@ -7,6 +7,7 @@ import {
   GetInvoiceParams,
   UpdateInvoiceParams,
   UpdateInvoiceBody,
+  BulkUpdateInvoicesBody,
   GetInvoiceStatsResponse,
   ExtractPreviewResponseItem,
 } from "@workspace/api-zod";
@@ -259,16 +260,27 @@ router.post("/invoices/upload-confirmed", async (req, res): Promise<void> => {
 });
 
 // PATCH /invoices/bulk-update
+const bulkFieldShape = BulkUpdateInvoicesBody.shape.fields.shape;
+// Zod 3's multipleOf check can miss tiny values written in exponential notation.
+const hasCentPrecision = (value: number | null | undefined) =>
+  value == null || (Number.isFinite(value) && value === Number(value.toFixed(2)));
+const precisionMessage = "Höchstens zwei Nachkommastellen sind erlaubt";
+const bulkUpdateFields = BulkUpdateInvoicesBody.shape.fields.extend({
+  steuersatz: bulkFieldShape.steuersatz.refine(hasCentPrecision, precisionMessage),
+  buchungskonto1Betrag: bulkFieldShape.buchungskonto1Betrag.refine(hasCentPrecision, precisionMessage),
+  buchungskonto2Betrag: bulkFieldShape.buchungskonto2Betrag.refine(hasCentPrecision, precisionMessage),
+}).strict();
 router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   const { ids, fields } = (req.body ?? {}) as { ids?: unknown; fields?: unknown };
   const numericIds = parseInvoiceIds(ids);
   if (numericIds === null) {
     res.status(400).json({ error: "ids muss ein nicht-leeres Array positiver sicherer Ganzzahlen sein" }); return;
   }
-  if (typeof fields !== "object" || fields === null) {
-    res.status(400).json({ error: "fields ist erforderlich" }); return;
+  const parsedFields = bulkUpdateFields.safeParse(fields);
+  if (!parsedFields.success) {
+    res.status(400).json({ error: parsedFields.error.message }); return;
   }
-  const f = fields as Record<string, unknown>;
+  const f = parsedFields.data;
   const update: Record<string, unknown> = {};
   if (f.rechnungssteller !== undefined) update.rechnungssteller = f.rechnungssteller;
   if (f.lieferantId !== undefined) update.lieferantId = f.lieferantId;
@@ -283,10 +295,7 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
 
   // MwSt-Satz: Steuer + Netto werden pro Rechnung aus dem jeweiligen Brutto neu berechnet
   const hasSteuersatz = f.steuersatz !== undefined && f.steuersatz !== null;
-  const rate = hasSteuersatz ? Number(f.steuersatz) : null;
-  if (hasSteuersatz && (rate === null || isNaN(rate))) {
-    res.status(400).json({ error: "Ungültiger MwSt-Satz" }); return;
-  }
+  const rate = f.steuersatz ?? null;
 
   if (Object.keys(update).length === 0 && !hasSteuersatz) {
     res.status(400).json({ error: "Keine Felder zum Aktualisieren" }); return;

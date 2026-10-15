@@ -984,22 +984,34 @@ components:
           description: Invoice IDs to update
         fields:
           type: object
+          additionalProperties: false
           description: Fields to set on all selected invoices
           properties:
             rechnungssteller:
               type: ["string", "null"]
             lieferantId:
               type: ["integer", "null"]
+              minimum: 1
+              maximum: 2147483647
             steuersatz:
               type: ["number", "null"]
+              minimum: 0
+              maximum: 100
+              multipleOf: 0.01
             buchungskonto1:
               type: ["string", "null"]
             buchungskonto1Betrag:
               type: ["number", "null"]
+              minimum: -9999999999.99
+              maximum: 9999999999.99
+              multipleOf: 0.01
             buchungskonto2:
               type: ["string", "null"]
             buchungskonto2Betrag:
               type: ["number", "null"]
+              minimum: -9999999999.99
+              maximum: 9999999999.99
+              multipleOf: 0.01
             buchungstext:
               type: ["string", "null"]
             freifeld1:

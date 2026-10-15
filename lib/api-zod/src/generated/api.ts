@@ -424,16 +424,32 @@ export const GetReextractJobResponse = zod.union([zod.object({
 /**
  * @summary Bulk update multiple invoices
  */
+export const bulkUpdateInvoicesBodyFieldsLieferantIdMax = 2147483647;
+
+export const bulkUpdateInvoicesBodyFieldsSteuersatzMin = 0;
+export const bulkUpdateInvoicesBodyFieldsSteuersatzMax = 100;
+export const bulkUpdateInvoicesBodyFieldsSteuersatzMultipleOf = 0.01;
+
+export const bulkUpdateInvoicesBodyFieldsBuchungskonto1BetragMin = -9999999999.99;
+export const bulkUpdateInvoicesBodyFieldsBuchungskonto1BetragMax = 9999999999.99;
+export const bulkUpdateInvoicesBodyFieldsBuchungskonto1BetragMultipleOf = 0.01;
+
+export const bulkUpdateInvoicesBodyFieldsBuchungskonto2BetragMin = -9999999999.99;
+export const bulkUpdateInvoicesBodyFieldsBuchungskonto2BetragMax = 9999999999.99;
+export const bulkUpdateInvoicesBodyFieldsBuchungskonto2BetragMultipleOf = 0.01;
+
+
+
 export const BulkUpdateInvoicesBody = zod.object({
   "ids": zod.array(zod.number().int()).describe('Invoice IDs to update'),
   "fields": zod.object({
   "rechnungssteller": zod.string().nullish(),
-  "lieferantId": zod.number().int().nullish(),
-  "steuersatz": zod.number().nullish(),
+  "lieferantId": zod.number().int().min(1).max(bulkUpdateInvoicesBodyFieldsLieferantIdMax).nullish(),
+  "steuersatz": zod.number().min(bulkUpdateInvoicesBodyFieldsSteuersatzMin).max(bulkUpdateInvoicesBodyFieldsSteuersatzMax).multipleOf(bulkUpdateInvoicesBodyFieldsSteuersatzMultipleOf).nullish(),
   "buchungskonto1": zod.string().nullish(),
-  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto1Betrag": zod.number().min(bulkUpdateInvoicesBodyFieldsBuchungskonto1BetragMin).max(bulkUpdateInvoicesBodyFieldsBuchungskonto1BetragMax).multipleOf(bulkUpdateInvoicesBodyFieldsBuchungskonto1BetragMultipleOf).nullish(),
   "buchungskonto2": zod.string().nullish(),
-  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungskonto2Betrag": zod.number().min(bulkUpdateInvoicesBodyFieldsBuchungskonto2BetragMin).max(bulkUpdateInvoicesBodyFieldsBuchungskonto2BetragMax).multipleOf(bulkUpdateInvoicesBodyFieldsBuchungskonto2BetragMultipleOf).nullish(),
   "buchungstext": zod.string().nullish(),
   "freifeld1": zod.string().nullish(),
   "freifeld2": zod.string().nullish(),
