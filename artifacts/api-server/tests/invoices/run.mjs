@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,11 @@ try {
     plugins: [{
       name: "invoice-test-boundaries",
       setup(build) {
+        // Exercise the actual route deadline without making the suite wait 70 seconds.
+        build.onLoad({ filter: /\/preview-deadline\.ts$/ }, async ({ path }) => ({
+          contents: (await readFile(path, "utf8")).replace("70_000", "40"),
+          loader: "ts",
+        }));
         build.onResolve({ filter: /^(pg|drizzle-zod|zod(?:\/.*)?)$/ }, ({ path }) => ({
           path: createRequire(new URL("../../../../lib/db/package.json", import.meta.url)).resolve(path),
           external: true,
@@ -27,7 +32,8 @@ try {
         }));
         build.onLoad({ filter: /.*/, namespace: "test-boundary" }, ({ path }) => ({
           contents: path.endsWith("pdf-extractor")
-            ? `export async function extractInvoiceFromPDF(buffer) {
+            ? `export async function extractInvoiceFromPDF(buffer, name, dependencies, signal) {
+                if (buffer.toString() === "%PDF-hang") return new Promise(() => {});
                 if (!buffer.toString().startsWith("%PDF-")) throw new Error("Invalid PDF");
                 return { rechnungssteller: "PDF supplier", bruttoBetrag: 119, nettoBetrag: 100,
                   steuerBetrag: 19, steuersatz: 19, positionen: [{ beschreibung: "PDF position", menge: 1 }] };

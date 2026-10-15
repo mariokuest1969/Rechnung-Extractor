@@ -11,6 +11,7 @@ import {
   ExtractPreviewResponseItem,
 } from "@workspace/api-zod";
 import { extractInvoiceFromPDF } from "../lib/pdf-extractor";
+import { previewDeadline, PREVIEW_TIMEOUT_MESSAGE } from "../lib/preview-deadline";
 import { syncDropbox, cleanupDropbox, downloadDropboxFile } from "../lib/dropbox-poller";
 import { DropboxAuthError } from "../lib/dropbox-connection";
 import { logger } from "../lib/logger";
@@ -224,16 +225,29 @@ router.post("/invoices/extract-preview", receivePdfs, async (req, res): Promise<
   const files = req.files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) { res.status(400).json({ error: "Keine PDF-Dateien hochgeladen" }); return; }
   const previews: Record<string, unknown>[] = [];
-  for (const file of files) {
-    try {
-      const extracted = await extractInvoiceFromPDF(file.buffer, file.originalname, undefined, undefined, { strict: true });
-      previews.push({ ...extracted, dateiname: file.originalname, status: "success", error: null });
-    } catch (err) {
-      req.log.error({ err, filename: file.originalname }, "Preview extraction failed");
-      previews.push({ dateiname: file.originalname, status: "error", error: "PDF konnte nicht ausgelesen werden. Bitte erneut versuchen oder die Datei prüfen." });
+  const disconnected = new AbortController();
+  const onClose = () => { if (!res.writableEnded) disconnected.abort(); };
+  res.on("close", onClose);
+  const deadline = previewDeadline(disconnected.signal);
+  try {
+    for (const file of files) {
+      if (disconnected.signal.aborted) return;
+      try {
+        const extracted = await deadline.run(signal =>
+          extractInvoiceFromPDF(file.buffer, file.originalname, undefined, signal, { strict: true }));
+        previews.push({ ...extracted, dateiname: file.originalname, status: "success", error: null });
+      } catch (err) {
+        req.log.error({ err, filename: file.originalname }, "Preview extraction failed");
+        previews.push({ dateiname: file.originalname, status: "error", error: deadline.signal.aborted
+          ? PREVIEW_TIMEOUT_MESSAGE
+          : "PDF konnte nicht ausgelesen werden. Bitte erneut versuchen oder die Datei prüfen." });
+      }
     }
+    if (!disconnected.signal.aborted) res.json(previews);
+  } finally {
+    deadline.dispose();
+    res.off("close", onClose);
   }
-  res.json(previews);
 });
 
 // POST /invoices/upload-confirmed — save pre-reviewed invoice data

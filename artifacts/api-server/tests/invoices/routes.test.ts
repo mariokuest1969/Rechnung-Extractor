@@ -7,6 +7,7 @@ import { client } from "./store";
 import { ExtractPreviewResponse } from "@workspace/api-zod";
 import { extractPreviews } from "../../../re2026/src/lib/upload-preview";
 import { parseInvoiceId, parseInvoiceIds } from "../../src/lib/invoice-ids";
+import { previewDeadline } from "../../src/lib/preview-deadline";
 
 const app = express();
 app.use(express.json());
@@ -203,12 +204,83 @@ test("preview client turns transport and malformed responses into per-file error
       { dateiname: "same.pdf", status: "success", error: null, bruttoBetrag: 119 },
       { dateiname: "same.pdf", status: "error", error: "Bitte erneut versuchen" },
     ];
+    let index = 0;
     globalThis.fetch = async (_url, options) => {
-      assert.equal((options?.body as FormData).getAll("files").length, 2);
-      return Response.json(expected);
+      assert.equal((options?.body as FormData).getAll("files").length, 1);
+      return Response.json([expected[index++]]);
     };
     assert.deepEqual(await extractPreviews(files), expected);
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("preview route retains success, bounds a hung extractor and permits retry without saving", async () => {
+  const before = (await request()).body;
+  const result = await upload([
+    { content: "%PDF-valid" }, { content: "%PDF-hang" }, { content: "%PDF-valid" },
+  ], "/extract-preview");
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.map((p: any) => p.status), ["success", "error", "error"]);
+  assert.match(result.body[1].error, /Zeitüberschreitung/);
+  assert.equal(ExtractPreviewResponse.safeParse(result.body).success, true);
+  const retry = await upload([{ content: "%PDF-valid" }], "/extract-preview");
+  assert.equal(retry.body[0].status, "success");
+  assert.deepEqual((await request()).body, before);
+});
+
+test("preview deadline aborts cooperative work and ignores late results", async () => {
+  const deadline = previewDeadline(undefined, 10);
+  let finish!: (value: string) => void;
+  try {
+    const pending = deadline.run(() => new Promise<string>(resolve => { finish = resolve; }));
+    await assert.rejects(pending, /Zeitüberschreitung/);
+    assert.equal(deadline.signal.aborted, true);
+    finish("too late");
+    let called = false;
+    await assert.rejects(deadline.run(async () => { called = true; }), /Zeitüberschreitung/);
+    assert.equal(called, false);
+  } finally { deadline.dispose(); }
+  const parent = new AbortController();
+  const disconnected = previewDeadline(parent.signal);
+  try {
+    const pending = disconnected.run(() => new Promise(() => {}));
+    parent.abort(new Error("Disconnected"));
+    await assert.rejects(pending, /Disconnected/);
+    assert.equal(disconnected.signal.aborted, true);
+  } finally { disconnected.dispose(); }
+});
+
+test("client bounds fetch and response-body hangs, keeps successes and retries only the failed file", async () => {
+  const originalFetch = globalThis.fetch;
+  const files = [new File(["a"], "same.pdf"), new File(["b"], "same.pdf"), new File(["c"], "last.pdf")];
+  try {
+    for (const hangBody of [false, true]) {
+      let index = 0;
+      let hungSignal: AbortSignal | undefined;
+      globalThis.fetch = async (_url, options) => {
+        const current = index++;
+        if (current === 1) {
+          hungSignal = options?.signal as AbortSignal;
+          if (!hangBody) return new Promise(() => {});
+          return { ok: true, json: () => new Promise(() => {}) } as Response;
+        }
+        return Response.json([{ dateiname: files[current].name, status: "success", error: null, bruttoBetrag: current + 1 }]);
+      };
+      const result = await extractPreviews(files, 10);
+      assert.deepEqual(result.map(p => p.status), ["success", "error", "success"]);
+      assert.match(result[1].error!, /Zeitüberschreitung/);
+      assert.equal(hungSignal?.aborted, true);
+      const first = result[0];
+      const last = result[2];
+      globalThis.fetch = async (_url, options) => {
+        assert.deepEqual((options?.body as FormData).getAll("files"), [files[1]]);
+        return Response.json([{ dateiname: files[1].name, status: "success", error: null }]);
+      };
+      [result[1]] = await extractPreviews([files[1]], 10);
+      assert.equal(result[0], first);
+      assert.equal(result[2], last);
+      assert.ok(result.every(p => p.status === "success"));
+    }
+  } finally { globalThis.fetch = originalFetch; }
 });

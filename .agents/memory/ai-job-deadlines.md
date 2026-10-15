@@ -14,3 +14,9 @@ Recover interrupted extraction by expiring its lease rather than failing every p
 **Why:** During overlapping server restarts, another instance may still be working. A blanket startup reset could report failure while that instance saves invoice changes.
 
 **How to apply:** Lock and check the job before changing invoice data; commit the success result in the same transaction. Expiration must use the same row lock, and expired workers must never write invoice changes.
+
+Upload previews are a deliberate exception to asynchronous persistence jobs: keep their deadlines independent of the existing bulk extraction jobs and isolate browser requests by file.
+
+**Why:** Previews do not persist invoices; isolating requests prevents a lost response or hung file from discarding already completed previews. The assigned scope explicitly excludes changes to bulk extraction jobs or reload recovery.
+
+**How to apply:** Preserve successful preview entries on retry and keep the browser deadline longer than the server extraction deadline.
