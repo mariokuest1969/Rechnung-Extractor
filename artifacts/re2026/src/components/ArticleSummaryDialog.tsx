@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Invoice } from "@workspace/api-client-react";
 import { createArticleSummary, type ArticleScope } from "@/lib/article-summary";
+import { sortArticleGroups, sortArticleRows, type ArticleSort, type ArticleSortKey } from "@/lib/article-sort";
 import { formatDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,8 @@ export function ArticleSummaryDialog({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [view, setView] = useState<View>("grouped");
+  const [groupSort, setGroupSort] = useState<ArticleSort>({ key: "description", direction: "asc" });
+  const [rowSort, setRowSort] = useState<ArticleSort>({ key: "description", direction: "asc" });
 
   useEffect(() => {
     if (open) setScope(selectedIds.length > 0 ? "selected" : "period");
@@ -59,10 +62,30 @@ export function ArticleSummaryDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const summary = useMemo(
+  const unsortedSummary = useMemo(
     () => createArticleSummary(invoices, { scope, selectedIds, from, to }, supplierNames),
     [invoices, scope, selectedIds, from, to, supplierNames],
   );
+  const summary = useMemo(() => ({
+    ...unsortedSummary,
+    groups: sortArticleGroups(unsortedSummary.groups, groupSort),
+    rows: sortArticleRows(unsortedSummary.rows, rowSort),
+  }), [unsortedSummary, groupSort, rowSort]);
+  const heading = (label: string, key: ArticleSortKey, right = false) => {
+    const sort = view === "grouped" ? groupSort : rowSort;
+    const active = sort.key === key;
+    return (
+      <th className={right ? thR : th} aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
+        <button type="button" className="inline-flex items-center gap-1 rounded focus-visible:outline focus-visible:outline-2"
+          title={`${label} ${active && sort.direction === "asc" ? "absteigend" : "aufsteigend"} sortieren`}
+          onClick={() => (view === "grouped" ? setGroupSort : setRowSort)({
+            key, direction: active && sort.direction === "asc" ? "desc" : "asc",
+          })}>
+          {label}<span aria-hidden="true">{active ? (sort.direction === "asc" ? "↑" : "↓") : "↕"}</span>
+        </button>
+      </th>
+    );
+  };
 
   const noMarked = scope === "selected" && selectedIds.length === 0;
   const empty = !summary.invalidRange && !noMarked && summary.rows.length === 0;
@@ -179,9 +202,9 @@ export function ArticleSummaryDialog({
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-muted/90 backdrop-blur text-xs text-muted-foreground">
                 <tr>
-                  <th className={th}>Artikel</th><th className={th}>Lieferant</th><th className={th}>Einheit</th>
-                  <th className={thR}>Menge</th><th className={thR}>Netto</th><th className={thR}>Brutto</th>
-                  <th className={th}>Währung</th><th className={thR}>MwSt</th><th className={thR}>Rechnungen</th>
+                  {heading("Artikel", "description")}{heading("Lieferant", "supplier")}{heading("Einheit", "unit")}
+                  {heading("Menge", "quantity", true)}{heading("Netto", "net", true)}{heading("Brutto", "gross", true)}
+                  {heading("Währung", "currency")}{heading("MwSt", "taxRate", true)}{heading("Rechnungen", "invoiceCount", true)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -206,10 +229,10 @@ export function ArticleSummaryDialog({
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-muted/90 backdrop-blur text-xs text-muted-foreground">
                 <tr>
-                  <th className={th}>Artikel</th><th className={th}>Lieferant</th><th className={th}>Datum</th>
-                  <th className={th}>RNR</th><th className={thR}>Menge</th><th className={th}>Einheit</th>
-                  <th className={thR}>Einzelpreis</th><th className={thR}>Netto</th><th className={thR}>Brutto</th>
-                  <th className={th}>Währung</th><th className={thR}>MwSt</th>
+                  {heading("Artikel", "description")}{heading("Lieferant", "supplier")}{heading("Datum", "date")}
+                  {heading("RNR", "invoiceNumber")}{heading("Menge", "quantity", true)}{heading("Einheit", "unit")}
+                  {heading("Einzelpreis", "unitPrice", true)}{heading("Netto", "net", true)}{heading("Brutto", "gross", true)}
+                  {heading("Währung", "currency")}{heading("MwSt", "taxRate", true)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
