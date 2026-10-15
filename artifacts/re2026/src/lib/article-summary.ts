@@ -6,6 +6,8 @@ export interface ArticleFilters {
   selectedIds: readonly number[];
   from: string;
   to: string;
+  description?: string;
+  supplierKey?: string;
 }
 export interface ArticleRow {
   invoiceId: number;
@@ -36,6 +38,27 @@ const normalized = (text: string) => text.trim().replace(/\s+/g, " ").toLocaleLo
 const amount = (value: number | null | undefined) => typeof value === "number" && Number.isFinite(value) ? value : null;
 const sum = (a: number | null, b: number | null) => b === null ? a : (a ?? 0) + b;
 
+function articleSupplier(invoice: Invoice, supplierNames: ReadonlyMap<number, string>) {
+  return {
+    supplier: (invoice.lieferantId ? supplierNames.get(invoice.lieferantId) : undefined) || invoice.rechnungssteller?.trim() || "Unbekannter Lieferant",
+    // Unknown issuers must remain distinct across invoices.
+    supplierKey: invoice.lieferantId ? `id:${invoice.lieferantId}` : invoice.rechnungssteller?.trim() ? `name:${normalized(invoice.rechnungssteller)}` : `unknown:${invoice.id}`,
+  };
+}
+
+export function articleSupplierOptions(invoices: readonly Invoice[], supplierNames: ReadonlyMap<number, string>) {
+  const options = new Map<string, string>();
+  for (const invoice of invoices) {
+    const { supplierKey, supplier } = articleSupplier(invoice, supplierNames);
+    options.set(supplierKey, supplier);
+  }
+  const labels = [...options.values()];
+  return [...options].map(([key, label]) => ({
+    key,
+    label: labels.filter((value) => value === label).length > 1 ? `${label} (${key})` : label,
+  })).sort((a, b) => a.label.localeCompare(b.label, "de"));
+}
+
 /** Dates are invoice calendar dates, inclusive; unknown dates never match a bounded period. */
 export function createArticleSummary(invoices: readonly Invoice[], filters: ArticleFilters, supplierNames: ReadonlyMap<number, string> = new Map()) {
   const invalidRange = Boolean(filters.from && filters.to && filters.from > filters.to);
@@ -47,11 +70,12 @@ export function createArticleSummary(invoices: readonly Invoice[], filters: Arti
     const date = invoice.datum.slice(0, 10);
     return (!filters.from || date >= filters.from) && (!filters.to || date <= filters.to);
   });
-  const rows: ArticleRow[] = scoped.flatMap((invoice) => {
-    const supplier = (invoice.lieferantId ? supplierNames.get(invoice.lieferantId) : undefined) || invoice.rechnungssteller || "Unbekannter Lieferant";
-    // Unassigned suppliers remain distinct by issuer; unknown issuers are never merged across invoices.
-    const supplierKey = invoice.lieferantId ? `id:${invoice.lieferantId}` : invoice.rechnungssteller?.trim() ? `name:${normalized(invoice.rechnungssteller)}` : `unknown:${invoice.id}`;
-    return (invoice.positionen ?? []).map((position) => ({
+  const supplierScoped = scoped.filter((invoice) =>
+    !filters.supplierKey || articleSupplier(invoice, supplierNames).supplierKey === filters.supplierKey);
+  const query = normalized(filters.description ?? "");
+  const rows: ArticleRow[] = supplierScoped.flatMap((invoice) => {
+    const { supplier, supplierKey } = articleSupplier(invoice, supplierNames);
+    return (invoice.positionen ?? []).filter((position) => !query || normalized(position.beschreibung).includes(query)).map((position) => ({
       invoiceId: invoice.id, invoiceNumber: invoice.rechnungsnummer || `#${invoice.id}`,
       date: invoice.datum ?? "", supplier, supplierKey,
       currency: invoice.waehrung?.trim().toUpperCase() || "Unbekannt", position,
@@ -90,8 +114,9 @@ export function createArticleSummary(invoices: readonly Invoice[], filters: Arti
     .sort((a, b) => a.description.localeCompare(b.description, "de") || a.supplier.localeCompare(b.supplier, "de"));
   return {
     invalidRange: filters.scope === "period" && invalidRange,
-    invoiceCount: scoped.length,
-    missingPositionsCount: scoped.filter((invoice) => !invoice.positionen?.length).length,
+    invoiceCount: supplierScoped.length,
+    matchingInvoiceCount: new Set(rows.map((row) => row.invoiceId)).size,
+    missingPositionsCount: supplierScoped.filter((invoice) => !invoice.positionen?.length).length,
     undatedCount: invoices.filter((invoice) => !invoice.datum).length,
     rows, groups,
   };

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Invoice } from "@workspace/api-client-react";
-import { createArticleSummary, type ArticleScope } from "@/lib/article-summary";
+import { articleSupplierOptions, createArticleSummary, type ArticleScope } from "@/lib/article-summary";
 import { createArticleExportTable, type ArticleView } from "@/lib/article-summary-export";
 import { exportArticleSummaryToCSV } from "@/lib/csv";
 import { exportArticleSummaryToXLSX } from "@/lib/xlsx-export";
@@ -53,6 +53,8 @@ export function ArticleSummaryDialog({
   const [scope, setScope] = useState<ArticleScope>("period");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [description, setDescription] = useState("");
+  const [supplierKey, setSupplierKey] = useState("");
   const [view, setView] = useState<ArticleView>("grouped");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -66,9 +68,17 @@ export function ArticleSummaryDialog({
   }, [open]);
 
   const unsortedSummary = useMemo(
-    () => createArticleSummary(invoices, { scope, selectedIds, from, to }, supplierNames),
-    [invoices, scope, selectedIds, from, to, supplierNames],
+    () => createArticleSummary(invoices, { scope, selectedIds, from, to, description, supplierKey }, supplierNames),
+    [invoices, scope, selectedIds, from, to, description, supplierKey, supplierNames],
   );
+  const suppliers = useMemo(() => articleSupplierOptions(invoices, supplierNames), [invoices, supplierNames]);
+  const articleFiltersActive = Boolean(description.trim() || supplierKey);
+  const resetFilters = () => {
+    setDescription("");
+    setSupplierKey("");
+    setFrom("");
+    setTo("");
+  };
   const summary = useMemo(() => ({
     ...unsortedSummary,
     groups: sortArticleGroups(unsortedSummary.groups, groupSort),
@@ -149,11 +159,34 @@ export function ArticleSummaryDialog({
               {(from || to) && (
                 <Button variant="ghost" size="sm" className="col-span-2 sm:col-span-1 h-8"
                   onClick={() => { setFrom(""); setTo(""); }} data-testid="button-article-clear-dates">
-                  Alle Daten
+                  Zeitraum zurücksetzen
                 </Button>
               )}
             </div>
           )}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="art-description" className="text-xs text-muted-foreground">Artikelbeschreibung suchen</Label>
+              <Input id="art-description" type="search" value={description} onChange={(e) => setDescription(e.target.value)}
+                placeholder="Beschreibung enthält …" className="h-8 text-sm" data-testid="input-article-description" />
+            </div>
+            <div>
+              <Label htmlFor="art-supplier" className="text-xs text-muted-foreground">Lieferant</Label>
+              <select id="art-supplier" value={supplierKey} onChange={(e) => setSupplierKey(e.target.value)}
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" data-testid="select-article-supplier">
+                <option value="">Alle Lieferanten</option>
+                {supplierKey && !suppliers.some((supplier) => supplier.key === supplierKey) && (
+                  <option value={supplierKey}>Lieferant nicht mehr verfügbar</option>
+                )}
+                {suppliers.map((supplier) => <option key={supplier.key} value={supplier.key}>{supplier.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" size="sm" disabled={!description && !supplierKey && !from && !to}
+              onClick={resetFilters} data-testid="button-article-reset-filters">Alle Filter zurücksetzen</Button>
+            <span className="text-xs text-muted-foreground">Löscht Suche, Lieferant und Zeitraum. Der gewählte Umfang bleibt erhalten.</span>
+          </div>
           {scope === "period" && (from || to) && summary.undatedCount > 0 && (
             <p className="text-xs text-muted-foreground">
               {summary.undatedCount} Rechnung{summary.undatedCount !== 1 ? "en" : ""} ohne Datum
@@ -175,7 +208,7 @@ export function ArticleSummaryDialog({
           </div>
           {!summary.invalidRange && !noMarked && (
             <p className="text-xs text-muted-foreground tabular-nums" data-testid="text-article-counts" aria-live="polite">
-              {summary.invoiceCount} Rechnung{summary.invoiceCount !== 1 ? "en" : ""} · {summary.rows.length} Positionen
+              {summary.matchingInvoiceCount} Rechnung{summary.matchingInvoiceCount !== 1 ? "en" : ""} mit Treffern · {summary.rows.length} Positionen
               · {summary.groups.length} Gruppen
             </p>
           )}
@@ -191,7 +224,7 @@ export function ArticleSummaryDialog({
             <Download className="mr-1.5 h-3.5 w-3.5" /> Excel herunterladen
           </Button>
           <span className="text-xs text-muted-foreground" role="status">
-            {exporting ? "Export wird erstellt …" : "Exportiert die aktuelle Ansicht und den gewählten Umfang."}
+            {exporting ? "Export wird erstellt …" : "Exportiert die aktuelle Ansicht mit allen aktiven Filtern."}
           </span>
         </div>
         {exportError && <p role="alert" className="text-sm text-destructive">{exportError}</p>}
@@ -228,7 +261,7 @@ export function ArticleSummaryDialog({
             <div className="p-8 text-center" data-testid="empty-article">
               <p className="font-medium text-foreground">Keine Positionen gefunden</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {summary.invoiceCount === 0 ? "Im gewählten Umfang liegen keine Rechnungen." : "Für diese Rechnungen wurden keine Artikelpositionen erfasst."}
+                {articleFiltersActive ? "Keine Positionen passen zu Suche und Lieferant im gewählten Umfang. Ändern Sie die Filter oder setzen Sie sie zurück." : summary.invoiceCount === 0 ? "Im gewählten Umfang liegen keine Rechnungen." : "Für diese Rechnungen wurden keine Artikelpositionen erfasst."}
               </p>
             </div>
           ) : view === "grouped" ? (
