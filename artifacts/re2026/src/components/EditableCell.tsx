@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
+import { formatDate } from "@/lib/format";
 
 interface EditableCellProps {
   value: string | number | null | undefined;
@@ -50,7 +51,8 @@ export function EditableCell({ value, onSave, type = "text", placeholder, classN
         onChange={(e) => setLocalValue(e.target.value)}
         onBlur={handleSave}
         onKeyDown={handleKeyDown}
-        className={`h-8 px-2 text-sm font-sans ${className}`}
+        lang={type === "date" ? "de-DE" : undefined}
+        className={`h-8 px-2 text-sm font-sans ${type === "date" ? "min-w-[150px] whitespace-nowrap" : ""} ${className}`}
       />
     );
   }
@@ -61,7 +63,7 @@ export function EditableCell({ value, onSave, type = "text", placeholder, classN
       onClick={() => setIsEditing(true)}
     >
       {value != null && String(value).trim() !== "" ? (
-        <span>{type === "number" || type === "date" ? String(value) : String(value)}</span>
+        <span className={type === "date" ? "whitespace-nowrap" : undefined}>{type === "date" ? formatDate(String(value)) : String(value)}</span>
       ) : (
         <span className="text-muted-foreground opacity-50 italic">{placeholder || "Leer"}</span>
       )}

@@ -1287,7 +1287,7 @@ export function InvoiceTable() {
                           );
                         case "datum":
                           return (
-                            <td key="datum" className="px-4 py-2">
+                            <td key="datum" className="min-w-[180px] whitespace-nowrap px-4 py-2">
                               <EditableCell type="date" value={inv.datum} onSave={(v) => handleUpdate(inv.id, "datum", v)} className="font-mono text-xs" />
                             </td>
                           );
