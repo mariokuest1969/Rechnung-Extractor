@@ -183,6 +183,63 @@ test("invalid invoice IDs reject entire requests without changing invoices", asy
   assert.equal((await request(`/${b.id}`)).status, 404);
 });
 
+test("bulk tax updates roll back every field when a later invoice fails", async () => {
+  const created = await request("/upload-confirmed", "POST", [
+    { dateiname: "atomic-a.pdf", bruttoBetrag: 119, nettoBetrag: 100, steuerBetrag: 19,
+      steuersatz: 19, freifeld1: "original-a", buchungskonto1Betrag: 10 },
+    { dateiname: "atomic-b.pdf", bruttoBetrag: 238, nettoBetrag: 200, steuerBetrag: 38,
+      steuersatz: 19, freifeld1: "original-b", buchungskonto1Betrag: 20 },
+    { dateiname: "atomic-null.pdf", freifeld1: "original-null" },
+  ]);
+  assert.equal(created.status, 200);
+  const ids = created.body.map((row: { id: number }) => row.id);
+  const snapshot = async () => (await client.query("SELECT * FROM pg_temp.invoices ORDER BY id")).rows;
+  const before = await snapshot();
+  // Sequence increments survive rollback: prove a real first UPDATE succeeded
+  // before the second UPDATE fails, independently of SELECT row ordering.
+  await client.query(`
+    CREATE TEMP SEQUENCE bulk_tax_attempts;
+    CREATE FUNCTION pg_temp.fail_second_tax_update() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF nextval('pg_temp.bulk_tax_attempts') = 2 THEN
+        RAISE EXCEPTION 'Intentional later invoice failure';
+      END IF;
+      RETURN NEW;
+    END $$;
+    CREATE TRIGGER fail_second_tax_update BEFORE UPDATE ON pg_temp.invoices
+      FOR EACH ROW EXECUTE FUNCTION pg_temp.fail_second_tax_update();
+  `);
+  try {
+    const result = await request("/bulk-update", "PATCH", {
+      ids, fields: { steuersatz: 7, freifeld1: "changed", buchungskonto1Betrag: 42 },
+    });
+    assert.equal(result.status, 500);
+    assert.equal((await client.query("SELECT last_value FROM pg_temp.bulk_tax_attempts")).rows[0].last_value, "2");
+    assert.deepEqual(await snapshot(), before);
+  } finally {
+    await client.query(`
+      DROP TRIGGER fail_second_tax_update ON pg_temp.invoices;
+      DROP FUNCTION pg_temp.fail_second_tax_update();
+      DROP SEQUENCE pg_temp.bulk_tax_attempts;
+    `);
+  }
+  // The same connection remains usable and success commits all selected rows.
+  const result = await request("/bulk-update", "PATCH", {
+    ids, fields: { steuersatz: 0, freifeld1: "committed", buchungskonto1Betrag: 42 },
+  });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, { updated: 3 });
+  for (const original of created.body) {
+    const saved = (await request(`/${original.id}`)).body;
+    assert.equal(saved.steuersatz, 0);
+    assert.equal(saved.nettoBetrag, original.bruttoBetrag);
+    assert.equal(saved.steuerBetrag, original.bruttoBetrag === null ? null : 0);
+    assert.equal(saved.freifeld1, "committed");
+    assert.equal(saved.buchungskonto1Betrag, 42);
+  }
+  await request("/bulk-delete", "POST", { ids });
+});
+
 test("bulk field validation rejects the whole request before database access", async () => {
   const created = await request("/upload-confirmed", "POST", [
     { dateiname: "fields-a.pdf", bruttoBetrag: 119, freifeld1: "keep" },

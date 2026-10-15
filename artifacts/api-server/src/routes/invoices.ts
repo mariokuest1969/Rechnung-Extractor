@@ -302,23 +302,26 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   }
   if (hasSteuersatz && rate !== null) {
     // Pro Rechnung: netto = brutto / (1 + satz/100), steuer = brutto - netto
-    const rows = await db
-      .select()
-      .from(invoicesTable)
-      .where(inArray(invoicesTable.id, numericIds));
-    let updated = 0;
-    for (const inv of rows) {
-      const perUpdate: Record<string, unknown> = { ...update, steuersatz: String(rate) };
-      const brutto = inv.bruttoBetrag != null ? parseFloat(inv.bruttoBetrag) : null;
-      if (brutto != null && !isNaN(brutto)) {
-        const netto = rate === 0 ? brutto : brutto / (1 + rate / 100);
-        const steuer = brutto - netto;
-        perUpdate.nettoBetrag = String(Math.round(netto * 100) / 100);
-        perUpdate.steuerBetrag = String(Math.round(steuer * 100) / 100);
+    const updated = await db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(invoicesTable)
+        .where(inArray(invoicesTable.id, numericIds));
+      let count = 0;
+      for (const inv of rows) {
+        const perUpdate: Record<string, unknown> = { ...update, steuersatz: String(rate) };
+        const brutto = inv.bruttoBetrag != null ? parseFloat(inv.bruttoBetrag) : null;
+        if (brutto != null && !isNaN(brutto)) {
+          const netto = rate === 0 ? brutto : brutto / (1 + rate / 100);
+          const steuer = brutto - netto;
+          perUpdate.nettoBetrag = String(Math.round(netto * 100) / 100);
+          perUpdate.steuerBetrag = String(Math.round(steuer * 100) / 100);
+        }
+        const changed = await tx.update(invoicesTable).set(perUpdate).where(eq(invoicesTable.id, inv.id)).returning({ id: invoicesTable.id });
+        count += changed.length;
       }
-      const changed = await db.update(invoicesTable).set(perUpdate).where(eq(invoicesTable.id, inv.id)).returning({ id: invoicesTable.id });
-      updated += changed.length;
-    }
+      return count;
+    });
     res.json({ updated });
     return;
   }
