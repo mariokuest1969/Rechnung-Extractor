@@ -441,11 +441,16 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
 });
 
 // PATCH /invoices/:id
+const singleUpdateBody = UpdateInvoiceBody.extend({
+  steuersatz: UpdateInvoiceBody.shape.steuersatz.refine(hasCentPrecision, precisionMessage),
+  buchungskonto1Betrag: UpdateInvoiceBody.shape.buchungskonto1Betrag.refine(hasCentPrecision, precisionMessage),
+  buchungskonto2Betrag: UpdateInvoiceBody.shape.buchungskonto2Betrag.refine(hasCentPrecision, precisionMessage),
+});
 router.patch("/invoices/:id", async (req, res): Promise<void> => {
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = UpdateInvoiceParams.safeParse({ id: rawId });
   if (!params.success || !Number.isSafeInteger(params.data.id) || params.data.id <= 0) { res.status(400).json({ error: "Ungültige ID" }); return; }
-  const body = UpdateInvoiceBody.safeParse(req.body);
+  const body = singleUpdateBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
   const update: Record<string, unknown> = {};
   const d = body.data;

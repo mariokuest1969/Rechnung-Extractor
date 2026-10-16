@@ -533,12 +533,26 @@ export const UpdateInvoiceParams = zod.object({
   "id": zod.coerce.number().int()
 })
 
+export const updateInvoiceBodySteuersatzMin = 0;
+export const updateInvoiceBodySteuersatzMax = 100;
+export const updateInvoiceBodySteuersatzMultipleOf = 0.01;
+
+export const updateInvoiceBodyBuchungskonto1BetragMin = -9999999999.99;
+export const updateInvoiceBodyBuchungskonto1BetragMax = 9999999999.99;
+export const updateInvoiceBodyBuchungskonto1BetragMultipleOf = 0.01;
+
+export const updateInvoiceBodyBuchungskonto2BetragMin = -9999999999.99;
+export const updateInvoiceBodyBuchungskonto2BetragMax = 9999999999.99;
+export const updateInvoiceBodyBuchungskonto2BetragMultipleOf = 0.01;
+
+
+
 export const UpdateInvoiceBody = zod.object({
   "rechnungssteller": zod.string().nullish(),
   "datum": zod.string().nullish(),
   "rechnungsnummer": zod.string().nullish(),
   "bruttoBetrag": zod.number().nullish(),
-  "steuersatz": zod.number().nullish(),
+  "steuersatz": zod.number().min(updateInvoiceBodySteuersatzMin).max(updateInvoiceBodySteuersatzMax).multipleOf(updateInvoiceBodySteuersatzMultipleOf).nullish(),
   "steuerBetrag": zod.number().nullish(),
   "nettoBetrag": zod.number().nullish(),
   "waehrung": zod.string().nullish(),
@@ -548,9 +562,9 @@ export const UpdateInvoiceBody = zod.object({
   "freifeld3": zod.string().nullish(),
   "lieferantId": zod.number().int().nullish(),
   "buchungskonto1": zod.string().nullish(),
-  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto1Betrag": zod.number().min(updateInvoiceBodyBuchungskonto1BetragMin).max(updateInvoiceBodyBuchungskonto1BetragMax).multipleOf(updateInvoiceBodyBuchungskonto1BetragMultipleOf).nullish(),
   "buchungskonto2": zod.string().nullish(),
-  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungskonto2Betrag": zod.number().min(updateInvoiceBodyBuchungskonto2BetragMin).max(updateInvoiceBodyBuchungskonto2BetragMax).multipleOf(updateInvoiceBodyBuchungskonto2BetragMultipleOf).nullish(),
   "buchungstext": zod.string().nullish()
 })
 

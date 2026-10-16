@@ -15,7 +15,11 @@ export interface InvoiceUpdate {
   rechnungsnummer?: string | null;
   /** @nullable */
   bruttoBetrag?: number | null;
-  /** @nullable */
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
   steuersatz?: number | null;
   /** @nullable */
   steuerBetrag?: number | null;
@@ -35,11 +39,19 @@ export interface InvoiceUpdate {
   lieferantId?: number | null;
   /** @nullable */
   buchungskonto1?: string | null;
-  /** @nullable */
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
   buchungskonto1Betrag?: number | null;
   /** @nullable */
   buchungskonto2?: string | null;
-  /** @nullable */
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
   buchungskonto2Betrag?: number | null;
   /** @nullable */
   buchungstext?: string | null;

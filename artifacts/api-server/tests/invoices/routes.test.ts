@@ -240,6 +240,58 @@ test("bulk tax updates roll back every field when a later invoice fails", async 
   await request("/bulk-delete", "POST", { ids });
 });
 
+test("single invoice updates reject invalid tax and booking values without changing data", async () => {
+  const created = await request("/upload-confirmed", "POST", [{
+    dateiname: "single-validation.pdf", steuersatz: 19,
+    buchungskonto1Betrag: 10, buchungskonto2Betrag: -10, freifeld1: "original",
+  }]);
+  assert.equal(created.status, 200);
+  const original = created.body[0];
+  const path = `/${original.id}`;
+  try {
+    for (const key of ["steuersatz", "buchungskonto1Betrag", "buchungskonto2Betrag"]) {
+      const invalid = ["19", "", true, [], {}, 1.001, 1e-7, -1e-7,
+        ...(key === "steuersatz" ? [-0.01, 100.01] : [-10000000000, 10000000000])];
+      for (const value of invalid) {
+        const result = await request(path, "PATCH", { [key]: value, freifeld1: "must not change" });
+        assert.equal(result.status, 400, `${key}=${JSON.stringify(value)}`);
+        assert.deepEqual((await request(path)).body, original);
+      }
+      // Send overflow as JSON numbers: JSON.stringify(Infinity) would instead send null.
+      for (const value of ["1e400", "-1e400"]) {
+        const result = await fetch(url + path, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: `{"${key}":${value},"freifeld1":"must not change"}`,
+        });
+        assert.equal(result.status, 400);
+        assert.deepEqual((await request(path)).body, original);
+      }
+    }
+    for (const rate of [0, 7.25, 100]) {
+      const values = { steuersatz: rate, buchungskonto1Betrag: -9999999999.99,
+        buchungskonto2Betrag: 9999999999.99 };
+      assert.equal((await request(path, "PATCH", values)).status, 200);
+      const saved = (await request(path)).body;
+      for (const [key, value] of Object.entries(values)) assert.equal(saved[key], value);
+      assert.equal(saved.freifeld1, "original");
+    }
+    for (const value of [-12.34, 0, null]) {
+      const values = { steuersatz: value === null ? null : 19,
+        buchungskonto1Betrag: value, buchungskonto2Betrag: value };
+      assert.equal((await request(path, "PATCH", values)).status, 200);
+      const saved = (await request(path)).body;
+      for (const [key, expected] of Object.entries(values)) assert.equal(saved[key], expected);
+    }
+    assert.equal((await request(path, "PATCH", { freifeld1: "only text" })).status, 200);
+    const saved = (await request(path)).body;
+    assert.equal(saved.steuersatz, null);
+    assert.equal(saved.buchungskonto1Betrag, null);
+    assert.equal(saved.buchungskonto2Betrag, null);
+  } finally {
+    await request(path, "DELETE");
+  }
+});
+
 test("bulk field validation rejects the whole request before database access", async () => {
   const created = await request("/upload-confirmed", "POST", [
     { dateiname: "fields-a.pdf", bruttoBetrag: 119, freifeld1: "keep" },
