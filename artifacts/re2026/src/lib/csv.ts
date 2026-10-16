@@ -1,4 +1,4 @@
-import { Invoice } from "@workspace/api-client-react";
+import type { Invoice } from "@workspace/api-client-react";
 import { POSITION_EXPORT_HEADERS, createPositionExportRows } from "./position-export";
 import { articleCsvCell, articleExportFilename, type ArticleExportTable, type ArticleView } from "./article-summary-export";
 
@@ -45,13 +45,13 @@ export function exportInvoicesToCSV(invoices: Invoice[]) {
     inv.rechnungssteller || "",
     inv.datum || "",
     inv.rechnungsnummer || "",
-    inv.bruttoBetrag != null ? inv.bruttoBetrag.toString().replace(".", ",") : "",
-    inv.steuersatz != null ? inv.steuersatz.toString().replace(".", ",") : "",
-    inv.steuerBetrag != null ? inv.steuerBetrag.toString().replace(".", ",") : "",
-    inv.nettoBetrag != null ? inv.nettoBetrag.toString().replace(".", ",") : "",
+    inv.bruttoBetrag ?? "",
+    inv.steuersatz ?? "",
+    inv.steuerBetrag ?? "",
+    inv.nettoBetrag ?? "",
     inv.waehrung || "EUR",
     inv.bemerkung || ""
-  ]);
+  ].map(articleCsvCell));
 
   downloadCSV(
     headers,
@@ -67,7 +67,8 @@ export function exportInvoicePositionsToCSV(invoices: Invoice[]): number {
 
   downloadCSV(
     [...POSITION_EXPORT_HEADERS],
-    rows,
+    // Keep numeric cells numeric (including credits); protect only text.
+    rows.map(row => row.map(cell => typeof cell === "string" ? articleCsvCell(cell) : cell)),
     `rechnungspositionen_${new Date().toISOString().split("T")[0]}.csv`
   );
   return rows.length;
