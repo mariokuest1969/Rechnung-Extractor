@@ -24,6 +24,7 @@ import { DropboxConnectionNotice } from "./DropboxConnectionNotice";
 import { ArticleSummaryDialog } from "./ArticleSummaryDialog";
 import { DuplicateReviewDialog } from "./DuplicateReviewDialog";
 import { formatNumber } from "@/lib/format";
+import { validateBulkTaxRate, describeBulkEditError } from "@/lib/bulk-edit-validation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -220,11 +221,27 @@ function BulkEditDialog({
   const [freifeld1, setFreifeld1] = useState("");
   const [freifeld2, setFreifeld2] = useState("");
   const [freifeld3, setFreifeld3] = useState("");
+  const [saveError, setSaveError] = useState<string>();
+  const [serverTaxError, setServerTaxError] = useState<string>();
+  const taxInputRef = useRef<HTMLInputElement>(null);
+  const taxValidation = validateBulkTaxRate(steuersatz);
+  const taxError = taxValidation.error ?? serverTaxError;
+
+  const changeTaxRate = (value: string) => {
+    setSteuersatz(value);
+    setServerTaxError(undefined);
+    setSaveError(undefined);
+  };
 
   const resetAll = () => {
     setRechnungssteller(""); setLieferantId(""); setSteuersatz("");
     setFreifeld1(""); setFreifeld2(""); setFreifeld3("");
+    setSaveError(undefined); setServerTaxError(undefined);
   };
+
+  useEffect(() => {
+    if (!open) resetAll();
+  }, [open]);
 
   const bulkMutation = useBulkUpdateInvoices({
     mutation: {
@@ -236,31 +253,40 @@ function BulkEditDialog({
         onDone();
         toast.success(`${selectedIds.length} Rechnung${selectedIds.length !== 1 ? "en" : ""} aktualisiert`);
       },
-      onError: () => toast.error("Fehler beim Aktualisieren"),
+      onError: (error) => {
+        const details = describeBulkEditError(error);
+        setSaveError(details.message);
+        setServerTaxError(details.taxError);
+        if (details.taxError) taxInputRef.current?.focus();
+      },
     },
   });
 
   const handleSave = () => {
+    if (bulkMutation.isPending) return;
+    setSaveError(undefined);
+    setServerTaxError(undefined);
+    if (taxValidation.error) {
+      taxInputRef.current?.focus();
+      return;
+    }
     const fields: Record<string, string | number | null> = {};
     if (rechnungssteller.trim()) fields.rechnungssteller = rechnungssteller.trim();
     if (lieferantId && lieferantId !== "none") fields.lieferantId = parseInt(lieferantId, 10);
-    if (steuersatz.trim()) {
-      const n = parseFloat(steuersatz.replace(",", "."));
-      if (!isNaN(n)) fields.steuersatz = n;
-    }
+    if (taxValidation.value !== undefined) fields.steuersatz = taxValidation.value;
     if (freifeld1.trim()) fields.freifeld1 = freifeld1.trim();
     if (freifeld2.trim()) fields.freifeld2 = freifeld2.trim();
     if (freifeld3.trim()) fields.freifeld3 = freifeld3.trim();
 
     if (Object.keys(fields).length === 0) {
-      toast.error("Bitte mindestens ein Feld ausfüllen");
+      setSaveError("Bitte mindestens ein Feld ausfüllen.");
       return;
     }
     bulkMutation.mutate({ data: { ids: selectedIds, fields } });
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) resetAll(); onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!bulkMutation.isPending) onOpenChange(o); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
@@ -272,7 +298,7 @@ function BulkEditDialog({
           Nur ausgefüllte Felder werden übernommen — leere Felder bleiben unverändert.
         </p>
 
-        <div className="space-y-4">
+        <fieldset disabled={bulkMutation.isPending} className="space-y-4">
           {/* Rechnungssteller */}
           <div>
             <FieldLabel>Rechnungssteller</FieldLabel>
@@ -309,7 +335,7 @@ function BulkEditDialog({
                 <button
                   key={r}
                   type="button"
-                  onClick={() => setSteuersatz(String(r))}
+                  onClick={() => changeTaxRate(String(r))}
                   className={`px-2.5 py-1.5 text-xs rounded border transition-colors ${
                     steuersatz === String(r)
                       ? "bg-primary text-primary-foreground border-primary"
@@ -320,13 +346,18 @@ function BulkEditDialog({
                 </button>
               ))}
               <Input
+                ref={taxInputRef}
+                aria-label="Individueller Steuersatz (MwSt %)"
+                aria-invalid={!!taxError}
+                aria-describedby={taxError ? "bulk-tax-error" : undefined}
                 className="flex-1 h-8 text-sm"
                 placeholder="oder freier Wert"
                 value={steuersatz}
-                onChange={(e) => setSteuersatz(e.target.value)}
+                onChange={(e) => changeTaxRate(e.target.value)}
                 inputMode="decimal"
               />
             </div>
+            {taxError && <p id="bulk-tax-error" role="alert" className="mt-1 text-sm text-destructive">{taxError}</p>}
           </div>
 
           {/* Freifelder */}
@@ -359,10 +390,12 @@ function BulkEditDialog({
               </div>
             </div>
           </div>
-        </div>
+        </fieldset>
+
+        {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Abbrechen</Button>
+          <Button variant="ghost" disabled={bulkMutation.isPending} onClick={() => onOpenChange(false)}>Abbrechen</Button>
           <Button onClick={handleSave} disabled={bulkMutation.isPending}>
             {bulkMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
             Speichern
