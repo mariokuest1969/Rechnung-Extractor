@@ -5,6 +5,92 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+export interface InvoicePosition {
+  /** @nullable */
+  positionsnummer?: string | null;
+  beschreibung: string;
+  /** @nullable */
+  menge?: number | null;
+  /** @nullable */
+  einheit?: string | null;
+  /** @nullable */
+  einzelpreis?: number | null;
+  /** @nullable */
+  steuersatz?: number | null;
+  /** @nullable */
+  nettobetrag?: number | null;
+  /** @nullable */
+  bruttobetrag?: number | null;
+}
+
+export interface Invoice {
+  id: number;
+  /** @nullable */
+  rechnungssteller?: string | null;
+  /** @nullable */
+  datum?: string | null;
+  /** @nullable */
+  rechnungsnummer?: string | null;
+  /** @nullable */
+  bruttoBetrag?: number | null;
+  /** @nullable */
+  steuersatz?: number | null;
+  /** @nullable */
+  steuerBetrag?: number | null;
+  /** @nullable */
+  nettoBetrag?: number | null;
+  /** @nullable */
+  waehrung?: string | null;
+  /** @nullable */
+  bemerkung?: string | null;
+  /** @nullable */
+  freifeld1?: string | null;
+  /** @nullable */
+  freifeld2?: string | null;
+  /** @nullable */
+  freifeld3?: string | null;
+  /** @nullable */
+  lieferantId?: number | null;
+  /** @nullable */
+  buchungskonto1?: string | null;
+  /** @nullable */
+  buchungskonto1Betrag?: number | null;
+  /** @nullable */
+  buchungskonto2?: string | null;
+  /** @nullable */
+  buchungskonto2Betrag?: number | null;
+  /** @nullable */
+  buchungstext?: string | null;
+  /** @nullable */
+  dateiname?: string | null;
+  /** @nullable */
+  dropboxFileId?: string | null;
+  positionen?: InvoicePosition[];
+  createdAt: string;
+}
+
+export interface InvoiceDuplicateGroup {
+  key: string;
+  invoices: Invoice[];
+}
+
+export interface InvoiceDuplicateReport {
+  excludedCount: number;
+  groups: InvoiceDuplicateGroup[];
+}
+
+export interface InvoiceDuplicateDeletion {
+  /**
+     * @minItems 1
+     * @items.minimum 1
+     */
+  ids: number[];
+}
+
+export interface InvoiceDuplicateDeletionResult {
+  deleted: number;
+}
+
 export type DropboxReconnectErrorCode = typeof DropboxReconnectErrorCode[keyof typeof DropboxReconnectErrorCode];
 
 
@@ -112,70 +198,6 @@ export interface Buchungskonto {
 export interface BuchungskontoCreate {
   kontonummer: string;
   bezeichnung: string;
-}
-
-export interface InvoicePosition {
-  /** @nullable */
-  positionsnummer?: string | null;
-  beschreibung: string;
-  /** @nullable */
-  menge?: number | null;
-  /** @nullable */
-  einheit?: string | null;
-  /** @nullable */
-  einzelpreis?: number | null;
-  /** @nullable */
-  steuersatz?: number | null;
-  /** @nullable */
-  nettobetrag?: number | null;
-  /** @nullable */
-  bruttobetrag?: number | null;
-}
-
-export interface Invoice {
-  id: number;
-  /** @nullable */
-  rechnungssteller?: string | null;
-  /** @nullable */
-  datum?: string | null;
-  /** @nullable */
-  rechnungsnummer?: string | null;
-  /** @nullable */
-  bruttoBetrag?: number | null;
-  /** @nullable */
-  steuersatz?: number | null;
-  /** @nullable */
-  steuerBetrag?: number | null;
-  /** @nullable */
-  nettoBetrag?: number | null;
-  /** @nullable */
-  waehrung?: string | null;
-  /** @nullable */
-  bemerkung?: string | null;
-  /** @nullable */
-  freifeld1?: string | null;
-  /** @nullable */
-  freifeld2?: string | null;
-  /** @nullable */
-  freifeld3?: string | null;
-  /** @nullable */
-  lieferantId?: number | null;
-  /** @nullable */
-  buchungskonto1?: string | null;
-  /** @nullable */
-  buchungskonto1Betrag?: number | null;
-  /** @nullable */
-  buchungskonto2?: string | null;
-  /** @nullable */
-  buchungskonto2Betrag?: number | null;
-  /** @nullable */
-  buchungstext?: string | null;
-  /** @nullable */
-  dateiname?: string | null;
-  /** @nullable */
-  dropboxFileId?: string | null;
-  positionen?: InvoicePosition[];
-  createdAt: string;
 }
 
 export interface InvoiceUpdate {

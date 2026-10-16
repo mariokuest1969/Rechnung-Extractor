@@ -13,14 +13,55 @@ const app = express();
 app.use(express.json());
 app.use((req, _res, next) => { req.log = { error() {} } as any; next(); });
 app.use(router);
-app.use((err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  res.status(err.status ?? 500).json({ error: "Request failed" });
+app.use((err: { status?: number; message?: string; cause?: { message?: string } }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  res.status(err.status ?? 500).json({ error: err.cause?.message ?? err.message ?? "Request failed" });
 });
 const server = app.listen(0, "127.0.0.1");
 await once(server, "listening");
 const address = server.address() as { port: number };
 const url = `http://127.0.0.1:${address.port}/invoices`;
+async function duplicateRequest(path = "", ids?: number[]) {
+  const response = await fetch(`http://127.0.0.1:${address.port}/invoice-duplicates${path}`, {
+    method: ids ? "POST" : "GET",
+    headers: { "Content-Type": "application/json" },
+    body: ids ? JSON.stringify({ ids }) : undefined,
+  });
+  return { status: response.status, body: await response.json() };
+}
 after(async () => { server.close(); await client.end(); });
+test("duplicate review and deletion retain originals and atomically suppress Dropbox reimport", async () => {
+  const { rows } = await client.query(`
+    INSERT INTO invoices (rechnungssteller,rechnungsnummer,datum,brutto_betrag,waehrung,dropbox_file_id)
+    VALUES ('Duplicate test','DUP-TEST','2026-02-01',119,'EUR','test-dup-keep'),
+           ('Duplicate test','DUP-TEST','2026-02-01',119,'EUR','test-dup-remove')
+    RETURNING id
+  `);
+  const [keep, remove] = rows.map(row => row.id);
+  const report = await duplicateRequest();
+  assert.equal(report.status, 200, JSON.stringify(report.body));
+  assert.ok(report.body.groups.some((g: { invoices: { id: number }[] }) => g.invoices.some(i => i.id === keep)));
+  assert.equal((await duplicateRequest("/delete", [keep, remove])).status, 409);
+  assert.equal((await duplicateRequest("/delete", [remove, 99999999])).status, 409);
+  assert.equal((await duplicateRequest("/delete", [remove, remove])).status, 400);
+  assert.equal((await client.query("SELECT count(*) FROM settings WHERE key LIKE 'dropbox_duplicate_excluded:%'")).rows[0].count, "0");
+  // A failing DELETE must roll back the exclusion inserted earlier in the same transaction.
+  await client.query(`CREATE FUNCTION pg_temp.fail_duplicate_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'test failure'; END $$`);
+  await client.query(`CREATE TRIGGER fail_duplicate_delete BEFORE DELETE ON invoices FOR EACH ROW EXECUTE FUNCTION pg_temp.fail_duplicate_delete()`);
+  assert.equal((await duplicateRequest("/delete", [remove])).status, 500);
+  assert.equal((await client.query("SELECT count(*) FROM settings")).rows[0].count, "0");
+  await client.query("DROP TRIGGER fail_duplicate_delete ON invoices");
+  const deleted = await duplicateRequest("/delete", [remove]);
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+  assert.equal(deleted.body.deleted, 1);
+  assert.equal((await client.query("SELECT id FROM invoices WHERE id=$1", [keep])).rowCount, 1);
+  assert.equal((await client.query("SELECT id FROM invoices WHERE id=$1", [remove])).rowCount, 0);
+  assert.equal((await client.query("SELECT key FROM settings WHERE key=$1", ["dropbox_duplicate_excluded:test-dup-remove"])).rowCount, 1);
+  assert.equal((await duplicateRequest("/delete", [remove])).status, 409);
+  // Leave other route tests' initial empty state untouched.
+  await client.query("DELETE FROM invoices WHERE id=$1", [keep]);
+  await client.query("DELETE FROM settings");
+});
 async function request(path = "", method = "GET", body?: unknown) {
   const response = await fetch(url + path, {
     method, headers: body === undefined ? {} : { "Content-Type": "application/json" },

@@ -19,6 +19,40 @@ tags:
   - name: buchungskonten
     description: Booking accounts
 paths:
+  /invoice-duplicates:
+    get:
+      operationId: listInvoiceDuplicates
+      tags: [invoices]
+      summary: Find possible duplicate invoices using complete matching invoice identifiers
+      responses:
+        "200":
+          description: Duplicate candidates for manual review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDuplicateReport"
+  /invoice-duplicates/delete:
+    post:
+      operationId: deleteInvoiceDuplicates
+      tags: [invoices]
+      summary: Delete reviewed copies while retaining at least one invoice per group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceDuplicateDeletion"
+      responses:
+        "200":
+          description: Deleted copies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDuplicateDeletionResult"
+        "400":
+          description: Invalid invoice IDs
+        "409":
+          description: Candidates changed or the request would remove every copy
   /settings/dropbox-app:
     get:
       operationId: getDropboxApp
@@ -630,6 +664,42 @@ paths:
 
 components:
   schemas:
+    InvoiceDuplicateReport:
+      type: object
+      required: [groups, excludedCount]
+      properties:
+        excludedCount:
+          type: integer
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceDuplicateGroup"
+    InvoiceDuplicateGroup:
+      type: object
+      required: [key, invoices]
+      properties:
+        key:
+          type: string
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+    InvoiceDuplicateDeletion:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+            minimum: 1
+    InvoiceDuplicateDeletionResult:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: integer
     DropboxReconnectError:
       type: object
       required: [error, code]

@@ -27,9 +27,8 @@ try {
           path: createRequire(new URL("../../../../lib/db/package.json", import.meta.url)).resolve(path),
           external: true,
         }));
-        build.onResolve({ filter: /\/(pdf-extractor|dropbox-poller|reextract-jobs|settings)$/ }, ({ path }) => ({
-          path, namespace: "test-boundary",
-        }));
+        build.onResolve({ filter: /\/(pdf-extractor|dropbox-poller|reextract-jobs|settings)$/ }, ({ path }) =>
+          path.includes("/schema/") ? undefined : ({ path, namespace: "test-boundary" }));
         build.onLoad({ filter: /.*/, namespace: "test-boundary" }, ({ path }) => ({
           contents: path.endsWith("pdf-extractor")
             ? `export async function extractInvoiceFromPDF(buffer, name, dependencies, signal) {

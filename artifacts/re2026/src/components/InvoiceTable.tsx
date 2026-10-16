@@ -22,6 +22,7 @@ import { BuchungsDialog } from "./BuchungsDialog";
 import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
 import { DropboxConnectionNotice } from "./DropboxConnectionNotice";
 import { ArticleSummaryDialog } from "./ArticleSummaryDialog";
+import { DuplicateReviewDialog } from "./DuplicateReviewDialog";
 import { formatNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,6 +44,7 @@ import {
   Eye,
   EyeOff,
   ListTree,
+  CopyCheck,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -578,6 +580,7 @@ export function InvoiceTable() {
   // ── Dialogs ───────────────────────────────────────────────────────────────
   const [lieferantenOpen, setLieferantenOpen] = useState(false);
   const [articlesOpen, setArticlesOpen] = useState(false);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [buchungsOpen, setBuchungsOpen] = useState(false);
   const [buchungsInvoice, setBuchungsInvoice] = useState<Invoice | null>(null);
@@ -884,6 +887,9 @@ export function InvoiceTable() {
             </Button>
             <Button variant="outline" size="sm" onClick={() => setArticlesOpen(true)} title="Artikelübersicht der erfassten Positionen" data-testid="button-open-articles">
               <ListTree className="h-4 w-4 mr-1" /> Artikelübersicht
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setDuplicatesOpen(true)} title="Mögliche doppelte Rechnungen prüfen" data-testid="button-open-duplicates">
+              <CopyCheck className="h-4 w-4 mr-1" /> Duplikate suchen
             </Button>
             <Button
               variant="outline" size="sm"
@@ -1441,6 +1447,7 @@ export function InvoiceTable() {
       />
 
       {/* Other Dialogs */}
+      <DuplicateReviewDialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen} supplierNames={lieferantenMap} />
       <LieferantenDialog open={lieferantenOpen} onOpenChange={setLieferantenOpen} />
       <ArticleSummaryDialog open={articlesOpen} onOpenChange={setArticlesOpen}
         invoices={invoices ?? []} selectedIds={Array.from(selected)} supplierNames={lieferantenMap} />

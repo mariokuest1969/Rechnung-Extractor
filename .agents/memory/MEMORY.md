@@ -1,3 +1,4 @@
+- [Duplicate invoice safety](invoice-duplicates.md) — review candidates manually, retain one copy, and atomically prevent Dropbox from reimporting removed duplicates.
 - [Codegen compatibility](codegen-compatibility.md) — generator dependency upgrades can emit the wrong Zod major with pnpm catalog dependencies; regenerate and check shared libraries.
 - [Article aggregation](article-summary.md) — keep summary grouping conservative; row numbers are not product IDs, and missing values must remain visibly incomplete.
 - [Invoice AI extraction fallback](invoice-extraction-fallback.md) — empty/garbage invoice fields across many rows = AI extractor failed and silently used regex; check logs for 429/insufficient_quota. Dev & prod DBs are separate.

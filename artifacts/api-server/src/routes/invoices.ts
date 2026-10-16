@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
 import { eq, inArray, sql } from "drizzle-orm";
-import { db, invoicesTable } from "@workspace/db";
+import { db, invoicesTable, settingsTable } from "@workspace/db";
+import { findInvoiceDuplicates, canDeleteDuplicateCopies, duplicateExclusionPrefix } from "../lib/invoice-duplicates";
 import {
   GetInvoiceParams,
   UpdateInvoiceParams,
@@ -393,6 +394,33 @@ router.get("/invoices/reextract-jobs/:jobId", async (req, res): Promise<void> =>
 });
 
 // POST /invoices/bulk-delete
+router.get("/invoice-duplicates", async (_req, res) => {
+  const report = findInvoiceDuplicates(await db.select().from(invoicesTable));
+  res.json({ ...report, groups: report.groups.map(group => ({ key: group.key, invoices: group.invoices.map(toApiInvoice) })) });
+});
+
+router.post("/invoice-duplicates/delete", async (req, res) => {
+  const ids = parseInvoiceIds(req.body?.ids);
+  if (!ids || ids.length !== new Set(req.body.ids).size || req.body.ids.length !== ids.length) {
+    res.status(400).json({ error: "Bitte gültige, eindeutige Rechnungs-IDs auswählen." }); return;
+  }
+  const deleted = await db.transaction(async tx => {
+    // Serialize with invoice changes/imports so the retained copy cannot disappear mid-check.
+    await tx.execute(sql`LOCK TABLE invoices IN SHARE ROW EXCLUSIVE MODE`);
+    const invoices = await tx.select().from(invoicesTable);
+    if (!canDeleteDuplicateCopies(invoices, ids)) return null;
+    const selected = new Set(ids);
+    const exclusions = invoices.filter(row => selected.has(row.id) && row.dropboxFileId)
+      .map(row => ({ key: duplicateExclusionPrefix + row.dropboxFileId, value: "1" }));
+    if (exclusions.length) await tx.insert(settingsTable).values(exclusions).onConflictDoNothing();
+    return await tx.delete(invoicesTable).where(inArray(invoicesTable.id, ids)).returning({ id: invoicesTable.id });
+  });
+  if (!deleted) {
+    res.status(409).json({ error: "Die Treffer haben sich geändert oder die Auswahl würde alle Kopien entfernen. Bitte erneut suchen; mindestens eine Rechnung je Gruppe muss erhalten bleiben." }); return;
+  }
+  res.json({ deleted: deleted.length });
+});
+
 router.post("/invoices/bulk-delete", async (req, res): Promise<void> => {
   const numericIds = parseInvoiceIds(req.body?.ids);
   if (numericIds === null) {

@@ -2,8 +2,9 @@
 // Polls the configured Dropbox folder (stored in DB settings) for new PDF files
 // and automatically imports them.
 import { ReplitConnectors } from "@replit/connectors-sdk";
-import { eq, isNotNull, inArray } from "drizzle-orm";
-import { db, invoicesTable } from "@workspace/db";
+import { eq, isNotNull, inArray, like, sql } from "drizzle-orm";
+import { db, invoicesTable, settingsTable } from "@workspace/db";
+import { duplicateExclusionPrefix } from "./invoice-duplicates";
 import { getDropboxFolder, getDropboxToken } from "../routes/settings";
 import { extractInvoiceFromPDF } from "./pdf-extractor";
 import { logger } from "./logger";
@@ -150,7 +151,12 @@ async function runDropboxSync(): Promise<SyncResult> {
   logger.info({ count: files.length, folder }, "Dropbox: found PDF files");
 
   const existing = await db.select({ fileId: invoicesTable.dropboxFileId }).from(invoicesTable).where(isNotNull(invoicesTable.dropboxFileId));
-  const batch = planDropboxBatch(files, new Set(existing.flatMap(row => row.fileId ? [row.fileId] : [])), MAX_FILES_PER_SYNC);
+  const excluded = await db.select({ key: settingsTable.key }).from(settingsTable).where(like(settingsTable.key, duplicateExclusionPrefix + "%"));
+  const skippedIds = new Set([
+    ...existing.flatMap(row => row.fileId ? [row.fileId] : []),
+    ...excluded.filter(row => row.key.startsWith(duplicateExclusionPrefix)).map(row => row.key.slice(duplicateExclusionPrefix.length)),
+  ]);
+  const batch = planDropboxBatch(files, skippedIds, MAX_FILES_PER_SYNC);
   result.skipped = batch.skipped;
   result.remaining = batch.remaining;
 
@@ -159,7 +165,13 @@ async function runDropboxSync(): Promise<SyncResult> {
       const buffer    = await downloadDropboxFile(file.path_display);
       const extracted = await extractInvoiceFromPDF(buffer, file.name);
 
-      await db.insert(invoicesTable).values({
+      const inserted = await db.transaction(async tx => {
+        // Match the duplicate deletion lock and recheck exclusions after extraction.
+        await tx.execute(sql`LOCK TABLE invoices IN SHARE ROW EXCLUSIVE MODE`);
+        const suppressed = await tx.select({ key: settingsTable.key }).from(settingsTable)
+          .where(eq(settingsTable.key, duplicateExclusionPrefix + file.id)).limit(1);
+        if (suppressed.length) return false;
+        const rows = await tx.insert(invoicesTable).values({
         rechnungssteller: extracted.rechnungssteller,
         datum:            extracted.datum,
         rechnungsnummer:  extracted.rechnungsnummer,
@@ -172,10 +184,14 @@ async function runDropboxSync(): Promise<SyncResult> {
         positionen:        extracted.positionen,
         dateiname:        file.name,
         dropboxFileId:    file.id,
+        }).onConflictDoNothing({ target: invoicesTable.dropboxFileId }).returning({ id: invoicesTable.id });
+        return rows.length > 0;
       });
 
-      result.imported++;
-      logger.info({ filename: file.name }, "Dropbox: file imported");
+      if (inserted) {
+        result.imported++;
+        logger.info({ filename: file.name }, "Dropbox: file imported");
+      } else result.skipped++;
     } catch (err) {
       if (err instanceof DropboxAuthError) throw err;
       result.errors++;

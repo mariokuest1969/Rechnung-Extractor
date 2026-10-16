@@ -8,6 +8,67 @@
 import * as zod from 'zod';
 
 
+/**
+ * @summary Find possible duplicate invoices using complete matching invoice identifiers
+ */
+export const ListInvoiceDuplicatesResponse = zod.object({
+  "excludedCount": zod.number().int(),
+  "groups": zod.array(zod.object({
+  "key": zod.string(),
+  "invoices": zod.array(zod.object({
+  "id": zod.number().int(),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "dateiname": zod.string().nullish(),
+  "dropboxFileId": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional(),
+  "createdAt": zod.string()
+}))
+}))
+})
+
+
+/**
+ * @summary Delete reviewed copies while retaining at least one invoice per group
+ */
+
+
+
+
+export const DeleteInvoiceDuplicatesBody = zod.object({
+  "ids": zod.array(zod.number().int().min(1)).min(1)
+})
+
+export const DeleteInvoiceDuplicatesResponse = zod.object({
+  "deleted": zod.number().int()
+})
+
+
 export const GetDropboxAppResponse = zod.object({
   "appKey": zod.string(),
   "configured": zod.boolean()

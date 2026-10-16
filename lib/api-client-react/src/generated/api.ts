@@ -43,6 +43,9 @@ import type {
   ErrorResponse,
   HealthStatus,
   Invoice,
+  InvoiceDuplicateDeletion,
+  InvoiceDuplicateDeletionResult,
+  InvoiceDuplicateReport,
   InvoicePdfSelection,
   InvoicePreview,
   InvoiceStats,
@@ -79,6 +82,195 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListInvoiceDuplicatesUrl = () => {
+
+
+
+
+  return `/api/invoice-duplicates`
+}
+
+/**
+ * @summary Find possible duplicate invoices using complete matching invoice identifiers
+ */
+export const listInvoiceDuplicates = async ( options?: Parameters<typeof customFetch>[1]): Promise<InvoiceDuplicateReport> => {
+
+  return customFetch<InvoiceDuplicateReport>(getListInvoiceDuplicatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInvoiceDuplicatesQueryKey = () => {
+    return [
+    `/api/invoice-duplicates`
+    ] as const;
+    }
+
+
+export const getListInvoiceDuplicatesQueryOptions = <TData = Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInvoiceDuplicatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvoiceDuplicates>>> = ({ signal }) => listInvoiceDuplicates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListInvoiceDuplicatesQueryResult = NonNullable<Awaited<ReturnType<typeof listInvoiceDuplicates>>>
+export type ListInvoiceDuplicatesQueryError = ErrorType<unknown>
+
+
+export function useListInvoiceDuplicates<TData = Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listInvoiceDuplicates>>,
+          TError,
+          Awaited<ReturnType<typeof listInvoiceDuplicates>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListInvoiceDuplicates<TData = Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listInvoiceDuplicates>>,
+          TError,
+          Awaited<ReturnType<typeof listInvoiceDuplicates>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListInvoiceDuplicates<TData = Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Find possible duplicate invoices using complete matching invoice identifiers
+ */
+
+export function useListInvoiceDuplicates<TData = Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDuplicates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListInvoiceDuplicatesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteInvoiceDuplicatesUrl = () => {
+
+
+
+
+  return `/api/invoice-duplicates/delete`
+}
+
+/**
+ * @summary Delete reviewed copies while retaining at least one invoice per group
+ */
+export const deleteInvoiceDuplicates = async (invoiceDuplicateDeletion: InvoiceDuplicateDeletion, options?: Parameters<typeof customFetch>[1]): Promise<InvoiceDuplicateDeletionResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<InvoiceDuplicateDeletionResult>(getDeleteInvoiceDuplicatesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(invoiceDuplicateDeletion)
+  }
+);}
+
+
+
+
+
+export const getDeleteInvoiceDuplicatesMutationKey = () => ['deleteInvoiceDuplicates'] as const;
+
+export const getDeleteInvoiceDuplicatesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInvoiceDuplicates>>, TError,DeleteInvoiceDuplicatesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteInvoiceDuplicates>>, TError,DeleteInvoiceDuplicatesMutationVariables, TContext> => {
+
+const mutationKey = getDeleteInvoiceDuplicatesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteInvoiceDuplicates>>, DeleteInvoiceDuplicatesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  deleteInvoiceDuplicates(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteInvoiceDuplicatesMutationResult = NonNullable<Awaited<ReturnType<typeof deleteInvoiceDuplicates>>>
+    export type DeleteInvoiceDuplicatesMutationBody = BodyType<InvoiceDuplicateDeletion>
+    export type DeleteInvoiceDuplicatesMutationError = ErrorType<void>
+    export type DeleteInvoiceDuplicatesMutationVariables = {data: BodyType<InvoiceDuplicateDeletion>}
+
+    /**
+ * @summary Delete reviewed copies while retaining at least one invoice per group
+ */
+export const useDeleteInvoiceDuplicates = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInvoiceDuplicates>>, TError,DeleteInvoiceDuplicatesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteInvoiceDuplicates>>,
+        TError,
+        DeleteInvoiceDuplicatesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteInvoiceDuplicatesMutationOptions(options), queryClient);
+    }
 
 export const getGetDropboxAppUrl = () => {
 
