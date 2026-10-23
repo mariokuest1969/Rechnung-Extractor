@@ -866,6 +866,7 @@ export function InvoiceTable() {
   }
 
   const selectedIds = Array.from(selected);
+  const selectedExportInvoices = invoices.filter(invoice => selected.has(invoice.id));
   const exportInvoices =
     selectedIds.length > 0
       ? invoices.filter((invoice) => selected.has(invoice.id))
@@ -879,6 +880,23 @@ export function InvoiceTable() {
       toast.error("Excel-Export fehlgeschlagen. Bitte erneut versuchen.");
     } finally {
       setExcelExporting(false);
+    }
+  };
+
+  const exportSelectedInvoices = async (format: "csv" | "xlsx") => {
+    if (!selectedExportInvoices.length) {
+      toast.info("Bitte zuerst Rechnungen markieren.");
+      return;
+    }
+    if (format === "xlsx") setExcelExporting(true);
+    try {
+      if (format === "csv") exportInvoicesToCSV(selectedExportInvoices);
+      else await exportInvoicesToXLSX(selectedExportInvoices);
+      toast.success(`${selectedExportInvoices.length} markierte Rechnungen als ${format === "csv" ? "CSV" : "Excel"} exportiert`);
+    } catch {
+      toast.error("Export der Auswahl fehlgeschlagen. Bitte erneut versuchen.");
+    } finally {
+      if (format === "xlsx") setExcelExporting(false);
     }
   };
 
@@ -946,6 +964,16 @@ export function InvoiceTable() {
             </Button>
             <Button variant="outline" size="sm" disabled={excelExporting} onClick={() => void exportExcelInvoices()}>
               Excel Export
+            </Button>
+            <Button variant="outline" size="sm" disabled={!selectedExportInvoices.length}
+              onClick={() => void exportSelectedInvoices("csv")} data-testid="export-selected-csv"
+              title="Nur die markierten Rechnungen als CSV exportieren">
+              Auswahl als CSV ({selectedExportInvoices.length})
+            </Button>
+            <Button variant="outline" size="sm" disabled={!selectedExportInvoices.length || excelExporting}
+              onClick={() => void exportSelectedInvoices("xlsx")} data-testid="export-selected-excel"
+              title="Nur die markierten Rechnungen als Excel-Datei (.xlsx) exportieren">
+              Auswahl als Excel ({selectedExportInvoices.length})
             </Button>
             <Button variant="outline" size="sm" onClick={() => void exportPositions("csv")}>
               Positionen CSV
