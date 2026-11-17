@@ -1,3 +1,4 @@
+- [Booking workflow](booking-workflow.md) — explicit review status, net inputs for 7/19/0, and confirmation-first monthly/quarterly/yearly recurring bookings.
 - [Duplicate invoice safety](invoice-duplicates.md) — review candidates manually, retain one copy, and atomically prevent Dropbox from reimporting removed duplicates.
 - [Codegen compatibility](codegen-compatibility.md) — generator dependency upgrades can emit the wrong Zod major with pnpm catalog dependencies; regenerate and check shared libraries.
 - [Article aggregation](article-summary.md) — keep summary grouping conservative; row numbers are not product IDs, and missing values must remain visibly incomplete.
