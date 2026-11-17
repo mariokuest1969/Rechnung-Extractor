@@ -1,3 +1,4 @@
+import { validateSingleNumber, singleEditError } from "@/lib/single-edit-validation";
 import { useState, useEffect } from "react";
 import {
   useListBuchungskonten,
@@ -110,9 +111,15 @@ export function BuchungsDialog({ open, onOpenChange, invoiceIds, singleInvoice }
   const [buchungstext, setBuchungstext] = useState("");
   const [showKontenplan, setShowKontenplan] = useState(false);
   const [newKonto, setNewKonto] = useState({ kontonummer: "", bezeichnung: "" });
+  const isSingle = invoiceIds.length === 1 && !!singleInvoice;
+  const [amountErrors, setAmountErrors] = useState<(string | undefined)[]>([]);
+  const [initializedId, setInitializedId] = useState<number | null>(null);
 
   useEffect(() => {
+    if (isSingle && open && initializedId === singleInvoice?.id) return;
+    setAmountErrors([]);
     if (open && singleInvoice) {
+      setInitializedId(singleInvoice.id);
       setZeile1({
         konto: singleInvoice.buchungskonto1 ?? "",
         bezeichnung:
@@ -127,11 +134,12 @@ export function BuchungsDialog({ open, onOpenChange, invoiceIds, singleInvoice }
       });
       setBuchungstext(singleInvoice.buchungstext ?? "");
     } else if (!open) {
+      setInitializedId(null);
       setZeile1(emptyZeile());
       setZeile2(emptyZeile());
       setBuchungstext("");
     }
-  }, [open, singleInvoice, buchungskonten]);
+  }, [open, singleInvoice, buchungskonten, initializedId, isSingle]);
 
   const invalidateInvoices = () => {
     queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
@@ -148,7 +156,13 @@ export function BuchungsDialog({ open, onOpenChange, invoiceIds, singleInvoice }
   const singleMutation = useUpdateInvoice({
     mutation: {
       onSuccess: () => { invalidateInvoices(); onOpenChange(false); toast.success("Buchung gespeichert"); },
-      onError: () => toast.error("Fehler beim Buchen"),
+      onError: (error) => {
+        setAmountErrors([
+          singleEditError(error, "buchungskonto1Betrag"),
+          singleEditError(error, "buchungskonto2Betrag"),
+        ]);
+        toast.error("Buchung nicht gespeichert. Bitte die Eingaben prüfen.");
+      },
     },
   });
 
@@ -170,11 +184,19 @@ export function BuchungsDialog({ open, onOpenChange, invoiceIds, singleInvoice }
   });
 
   const handleSave = () => {
+    const amounts = [
+      validateSingleNumber("buchungskonto1Betrag", zeile1.betrag),
+      validateSingleNumber("buchungskonto2Betrag", zeile2.betrag),
+    ];
+    if (isSingle) {
+      setAmountErrors(amounts.map((a) => a.error));
+      if (amounts.some((a) => a.error)) return;
+    }
     const fields = {
       buchungskonto1: zeile1.konto || null,
-      buchungskonto1Betrag: zeile1.betrag ? parseFloat(zeile1.betrag.replace(",", ".")) : null,
+      buchungskonto1Betrag: isSingle ? amounts[0].value : zeile1.betrag ? parseFloat(zeile1.betrag.replace(",", ".")) : null,
       buchungskonto2: zeile2.konto || null,
-      buchungskonto2Betrag: zeile2.betrag ? parseFloat(zeile2.betrag.replace(",", ".")) : null,
+      buchungskonto2Betrag: isSingle ? amounts[1].value : zeile2.betrag ? parseFloat(zeile2.betrag.replace(",", ".")) : null,
       buchungstext: buchungstext || null,
     };
 
@@ -223,10 +245,14 @@ export function BuchungsDialog({ open, onOpenChange, invoiceIds, singleInvoice }
               <Input
                 placeholder="Betrag"
                 value={zeile1.betrag}
-                onChange={(e) => setZeile1((z) => ({ ...z, betrag: e.target.value }))}
+                aria-label="Buchungskonto 1 Betrag"
+                aria-invalid={isSingle && !!amountErrors[0]}
+                aria-describedby={isSingle && amountErrors[0] ? "booking-amount-1-error" : undefined}
+                onChange={(e) => { setZeile1((z) => ({ ...z, betrag: e.target.value })); setAmountErrors((errors) => [undefined, errors[1]]); }}
                 className="font-mono"
               />
             </div>
+            {isSingle && amountErrors[0] && <p id="booking-amount-1-error" role="alert" className="text-xs text-destructive">{amountErrors[0]}</p>}
           </div>
 
           {/* Konto 2 */}
@@ -250,10 +276,14 @@ export function BuchungsDialog({ open, onOpenChange, invoiceIds, singleInvoice }
               <Input
                 placeholder="Betrag"
                 value={zeile2.betrag}
-                onChange={(e) => setZeile2((z) => ({ ...z, betrag: e.target.value }))}
+                aria-label="Buchungskonto 2 Betrag"
+                aria-invalid={isSingle && !!amountErrors[1]}
+                aria-describedby={isSingle && amountErrors[1] ? "booking-amount-2-error" : undefined}
+                onChange={(e) => { setZeile2((z) => ({ ...z, betrag: e.target.value })); setAmountErrors((errors) => [errors[0], undefined]); }}
                 className="font-mono"
               />
             </div>
+            {isSingle && amountErrors[1] && <p id="booking-amount-2-error" role="alert" className="text-xs text-destructive">{amountErrors[1]}</p>}
           </div>
 
           {/* Buchungstext */}

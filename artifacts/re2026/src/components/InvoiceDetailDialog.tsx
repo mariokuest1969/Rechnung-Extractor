@@ -1,3 +1,4 @@
+import { validateSingleNumber, singleEditError } from "@/lib/single-edit-validation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -143,11 +144,13 @@ function DetailField({
 // ─── MwSt % field with dropdown + auto-calc indicator ─────────────────────────
 function MwStField({
   value,
+  error,
   onSave,
   captureField,
   onStartCapture,
   hasAutoCalc,
 }: {
+  error?: string;
   value: string | number | null | undefined;
   onSave: (v: string | null) => void;
   captureField: keyof Invoice | null;
@@ -213,6 +216,9 @@ function MwStField({
         <input
           type="text"
           inputMode="decimal"
+          aria-label="MwSt %"
+          aria-invalid={!!error}
+          aria-describedby={error ? "detail-tax-error" : undefined}
           value={local}
           placeholder="z.B. 10.7"
           onChange={(e) => setLocal(e.target.value)}
@@ -224,6 +230,7 @@ function MwStField({
           }`}
         />
       </div>
+      {error && <p id="detail-tax-error" role="alert" className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
@@ -339,6 +346,9 @@ export function InvoiceDetailDialog({
 
   useEffect(() => { if (!open) setCaptureField(null); }, [open]);
 
+  const [taxError, setTaxError] = useState<string>();
+  const [taxDraft, setTaxDraft] = useState<string | undefined>();
+  useEffect(() => { setTaxError(undefined); setTaxDraft(undefined); }, [invoice?.id, open]);
   const updateMutation = useUpdateInvoice({
     mutation: {
       onSuccess: () => {
@@ -351,11 +361,17 @@ export function InvoiceDetailDialog({
   });
 
   // ── Update with optional auto-calc ────────────────────────────────────────
-  const handleUpdate = useCallback((field: keyof Invoice, rawValue: string | null) => {
+  const handleUpdate = useCallback(async (field: keyof Invoice, rawValue: string | null) => {
     if (!invoice) return;
 
     let parsedValue: string | number | null = rawValue;
-    if (["bruttoBetrag", "steuersatz", "steuerBetrag", "nettoBetrag"].includes(field as string)) {
+    if (field === "steuersatz") {
+      setTaxDraft(rawValue ?? "");
+      const result = validateSingleNumber("steuersatz", rawValue);
+      setTaxError(result.error);
+      if (result.error) return false;
+      parsedValue = result.value;
+    } else if (["bruttoBetrag", "steuerBetrag", "nettoBetrag"].includes(field as string)) {
       parsedValue = rawValue ? (parseFloat(rawValue.replace(",", ".")) || null) : null;
     } else if (field === "lieferantId") {
       parsedValue = rawValue ? parseInt(rawValue, 10) : null;
@@ -381,16 +397,23 @@ export function InvoiceDetailDialog({
       }
     }
 
-    updateMutation.mutate({ id: invoice.id, data: updates });
+    try {
+      await updateMutation.mutateAsync({ id: invoice.id, data: updates });
+      return true;
+    } catch (error) {
+      if (field === "steuersatz") setTaxError(singleEditError(error, field));
+      return false;
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoice?.id, invoice?.bruttoBetrag, invoice?.steuersatz]);
 
-  const handleCapture = useCallback((text: string) => {
+  const handleCapture = useCallback(async (text: string) => {
     if (!captureField || !invoice) return;
     const label = CAPTURE_FIELDS.find((f) => f.key === captureField)?.label ?? String(captureField);
     // For numeric capture fields, also trigger auto-calc if applicable
-    handleUpdate(captureField, text);
-    toast.success(`"${text.slice(0, 40)}${text.length > 40 ? "…" : ""}" → ${label}`);
+    if (await handleUpdate(captureField, text)) {
+      toast.success(`"${text.slice(0, 40)}${text.length > 40 ? "…" : ""}" → ${label}`);
+    }
     setCaptureField(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureField, handleUpdate]);
@@ -521,7 +544,8 @@ export function InvoiceDetailDialog({
                     )}
                     {showMwst && (
                       <MwStField
-                        value={invoice.steuersatz != null ? String(invoice.steuersatz) : null}
+                        value={taxDraft ?? (invoice.steuersatz != null ? String(invoice.steuersatz) : null)}
+                        error={taxError}
                         onSave={(v) => handleUpdate("steuersatz", v)}
                         captureField={captureField}
                         onStartCapture={(k) => setCaptureField((prev) => (prev === k ? null : k))}

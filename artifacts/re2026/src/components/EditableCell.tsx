@@ -1,23 +1,28 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useId } from "react";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/format";
 
 interface EditableCellProps {
   value: string | number | null | undefined;
-  onSave: (val: string | null) => void;
+  onSave: (val: string | null) => void | Promise<unknown>;
+  validate?: (val: string) => string | undefined;
+  describeError?: (error: unknown) => string;
   type?: "text" | "number" | "date";
   placeholder?: string;
   className?: string;
 }
 
-export function EditableCell({ value, onSave, type = "text", placeholder, className = "" }: EditableCellProps) {
+export function EditableCell({ value, onSave, validate, describeError, type = "text", placeholder, className = "" }: EditableCellProps) {
+  const [error, setError] = useState<string>();
+  const saving = useRef(false);
+  const errorId = useId();
   const [isEditing, setIsEditing] = useState(false);
   const [localValue, setLocalValue] = useState(value != null ? String(value) : "");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setLocalValue(value != null ? String(value) : "");
-  }, [value]);
+    if (!isEditing) setLocalValue(value != null ? String(value) : "");
+  }, [value, isEditing]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -25,11 +30,22 @@ export function EditableCell({ value, onSave, type = "text", placeholder, classN
     }
   }, [isEditing]);
 
-  const handleSave = () => {
-    setIsEditing(false);
+  const handleSave = async () => {
+    if (saving.current) return;
+    const validationError = validate?.(localValue);
+    setError(validationError);
+    if (validationError) return;
     const trimmed = localValue.trim();
-    if (trimmed !== (value != null ? String(value) : "")) {
-      onSave(trimmed === "" ? null : trimmed);
+    try {
+      saving.current = true;
+      if (trimmed !== (value != null ? String(value) : "")) {
+        await onSave(trimmed === "" ? null : trimmed);
+      }
+      setIsEditing(false);
+    } catch (error) {
+      setError(describeError?.(error) ?? "Nicht gespeichert. Bitte erneut versuchen.");
+    } finally {
+      saving.current = false;
     }
   };
 
@@ -37,6 +53,7 @@ export function EditableCell({ value, onSave, type = "text", placeholder, classN
     if (e.key === "Enter") {
       handleSave();
     } else if (e.key === "Escape") {
+      setError(undefined);
       setLocalValue(value != null ? String(value) : "");
       setIsEditing(false);
     }
@@ -44,16 +61,18 @@ export function EditableCell({ value, onSave, type = "text", placeholder, classN
 
   if (isEditing) {
     return (
-      <Input
+      <div><Input
         ref={inputRef}
         type={type === "date" ? "date" : type === "number" ? "text" : "text"} // use text for number to allow commas
         value={localValue}
-        onChange={(e) => setLocalValue(e.target.value)}
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(e) => { setLocalValue(e.target.value); setError(undefined); }}
         onBlur={handleSave}
         onKeyDown={handleKeyDown}
         lang={type === "date" ? "de-DE" : undefined}
         className={`h-8 px-2 text-sm font-sans ${type === "date" ? "min-w-[150px] whitespace-nowrap" : ""} ${className}`}
-      />
+      />{error && <p id={errorId} role="alert" className="text-xs text-destructive">{error}</p>}</div>
     );
   }
 

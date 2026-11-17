@@ -1,3 +1,4 @@
+import { validateSingleNumber, singleEditError } from "@/lib/single-edit-validation";
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
   useListInvoices,
@@ -819,7 +820,8 @@ export function InvoiceTable() {
         if (isNaN(parsedValue as number)) parsedValue = null;
       }
     }
-    updateMutation.mutate({ id, data: { [field]: parsedValue } });
+    if (field === "steuersatz") return updateMutation.mutateAsync({ id, data: { steuersatz: validateSingleNumber("steuersatz", value).value } });
+    return updateMutation.mutate({ id, data: { [field]: parsedValue } });
   };
 
   if (isLoading) {
@@ -1373,7 +1375,7 @@ export function InvoiceTable() {
                         case "mwst":
                           return (
                             <td key="mwst" className="px-4 py-2 text-right">
-                              <EditableCell type="number" value={inv.steuersatz} onSave={(v) => handleUpdate(inv.id, "steuersatz", v)} className="font-mono text-right" />
+                              <EditableCell type="number" value={inv.steuersatz} validate={(v) => validateSingleNumber("steuersatz", v).error} describeError={(e) => singleEditError(e, "steuersatz")} onSave={(v) => handleUpdate(inv.id, "steuersatz", v)} className="font-mono text-right" />
                             </td>
                           );
                         case "steuer":
