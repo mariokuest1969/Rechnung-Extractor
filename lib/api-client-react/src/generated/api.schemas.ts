@@ -207,7 +207,11 @@ export interface InvoiceUpdate {
   datum?: string | null;
   /** @nullable */
   rechnungsnummer?: string | null;
-  /** @nullable */
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
   bruttoBetrag?: number | null;
   /**
      * @minimum 0
@@ -215,9 +219,17 @@ export interface InvoiceUpdate {
      * @nullable
      */
   steuersatz?: number | null;
-  /** @nullable */
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
   steuerBetrag?: number | null;
-  /** @nullable */
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
   nettoBetrag?: number | null;
   /** @nullable */
   waehrung?: string | null;

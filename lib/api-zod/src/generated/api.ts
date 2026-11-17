@@ -594,9 +594,18 @@ export const UpdateInvoiceParams = zod.object({
   "id": zod.coerce.number().int()
 })
 
+export const updateInvoiceBodyBruttoBetragMin = -9999999999.99;
+export const updateInvoiceBodyBruttoBetragMax = 9999999999.99;
+
 export const updateInvoiceBodySteuersatzMin = 0;
 export const updateInvoiceBodySteuersatzMax = 100;
 export const updateInvoiceBodySteuersatzMultipleOf = 0.01;
+
+export const updateInvoiceBodySteuerBetragMin = -9999999999.99;
+export const updateInvoiceBodySteuerBetragMax = 9999999999.99;
+
+export const updateInvoiceBodyNettoBetragMin = -9999999999.99;
+export const updateInvoiceBodyNettoBetragMax = 9999999999.99;
 
 export const updateInvoiceBodyBuchungskonto1BetragMin = -9999999999.99;
 export const updateInvoiceBodyBuchungskonto1BetragMax = 9999999999.99;
@@ -612,10 +621,10 @@ export const UpdateInvoiceBody = zod.object({
   "rechnungssteller": zod.string().nullish(),
   "datum": zod.string().nullish(),
   "rechnungsnummer": zod.string().nullish(),
-  "bruttoBetrag": zod.number().nullish(),
+  "bruttoBetrag": zod.number().min(updateInvoiceBodyBruttoBetragMin).max(updateInvoiceBodyBruttoBetragMax).nullish(),
   "steuersatz": zod.number().min(updateInvoiceBodySteuersatzMin).max(updateInvoiceBodySteuersatzMax).multipleOf(updateInvoiceBodySteuersatzMultipleOf).nullish(),
-  "steuerBetrag": zod.number().nullish(),
-  "nettoBetrag": zod.number().nullish(),
+  "steuerBetrag": zod.number().min(updateInvoiceBodySteuerBetragMin).max(updateInvoiceBodySteuerBetragMax).nullish(),
+  "nettoBetrag": zod.number().min(updateInvoiceBodyNettoBetragMin).max(updateInvoiceBodyNettoBetragMax).nullish(),
   "waehrung": zod.string().nullish(),
   "bemerkung": zod.string().nullish(),
   "freifeld1": zod.string().nullish(),

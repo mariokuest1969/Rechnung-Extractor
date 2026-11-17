@@ -469,6 +469,8 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
 });
 
 // PATCH /invoices/:id
+// Inherit the numeric(12, 2) amount bounds from InvoiceUpdate before any DB write.
+// Null amounts and negative credit notes remain valid.
 const singleUpdateBody = UpdateInvoiceBody.extend({
   steuersatz: UpdateInvoiceBody.shape.steuersatz.refine(hasCentPrecision, precisionMessage),
   buchungskonto1Betrag: UpdateInvoiceBody.shape.buchungskonto1Betrag.refine(hasCentPrecision, precisionMessage),
