@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Invoice } from "@workspace/api-client-react";
@@ -27,6 +27,15 @@ const views = ["grouped", "rows"] as const;
 type View = typeof views[number];
 
 afterEach(cleanup);
+beforeAll(() => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  Element.prototype.scrollIntoView = vi.fn();
+});
+
+async function selectSupplier(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByLabelText("Lieferant"));
+  await user.click(screen.getByRole("option", { name }));
+}
 
 function mount(selectedIds: number[] = [4, 5]) {
   render(<ArticleSummaryDialog open onOpenChange={() => {}}
@@ -58,11 +67,56 @@ function rows(view: View, count: number, article?: string, supplier?: string) {
 }
 function filtersCleared() {
   expect((screen.getByLabelText("Artikelbeschreibung suchen") as HTMLInputElement).value).toBe("");
-  expect((screen.getByLabelText("Lieferant") as HTMLSelectElement).value).toBe("");
+  expect(screen.getByLabelText("Lieferant").textContent).toBe("Alle Lieferanten");
   expect((screen.getByRole("button", { name: "Alle Filter zurücksetzen" }) as HTMLButtonElement).disabled).toBe(true);
 }
 
 describe("article filter control wiring", () => {
+  it("searches a long list without applying a filter until keyboard selection, and cancels with Escape", async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 120 }, (_, i) => invoice(i + 10, `Firma ${String(i).padStart(3, "0")}`, "2026-01-01", ["Tee"]));
+    render(<ArticleSummaryDialog open onOpenChange={() => {}}
+      invoices={many} selectedIds={[]} supplierNames={new Map()} />);
+    await user.click(screen.getByLabelText("Lieferant"));
+    expect(screen.getAllByRole("option")).toHaveLength(121);
+    await user.type(screen.getByRole("combobox", { name: "Lieferanten suchen" }), "FIRMA 119");
+    counts(120, 120, 120);
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    await user.keyboard("{ArrowDown}{Enter}");
+    counts(1, 1, 1);
+    expect(document.activeElement).toBe(screen.getByLabelText("Lieferant"));
+    await user.keyboard("{Enter}");
+    await user.type(screen.getByRole("combobox", { name: "Lieferanten suchen" }), "nicht vorhanden");
+    expect(screen.getByText("Keine Lieferanten gefunden.")).toBeTruthy();
+    counts(1, 1, 1);
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByLabelText("Lieferant").textContent).toBe("Firma 119");
+    await user.click(screen.getByLabelText("Lieferant"));
+    expect((screen.getByRole("combobox") as HTMLInputElement).value).toBe("");
+    await user.click(screen.getByRole("option", { name: "Alle Lieferanten" }));
+    counts(120, 120, 120);
+  });
+
+  it("keeps same-named supplier IDs, unassigned issuers and unknown issuers independently selectable", async () => {
+    const user = userEvent.setup();
+    const data = [
+      { ...invoice(1, "Gleich", null, ["Tee"]), lieferantId: 1 },
+      { ...invoice(2, "Gleich", null, ["Tee"]), lieferantId: 2 },
+      invoice(3, "Gleich", null, ["Tee"]),
+      invoice(4, "", null, ["Tee"]),
+      invoice(5, "", null, ["Tee"]),
+    ];
+    render(<ArticleSummaryDialog open onOpenChange={() => {}}
+      invoices={data} selectedIds={[]} supplierNames={new Map([[1, "Gleich"], [2, "Gleich"]])} />);
+    for (const label of ["Gleich (id:1)", "Gleich (id:2)", "Gleich (name:gleich)",
+      "Unbekannter Lieferant (unknown:4)", "Unbekannter Lieferant (unknown:5)"]) {
+      await selectSupplier(user, label);
+      counts(1, 1, 1);
+      expect(screen.getByLabelText("Lieferant").textContent).toBe(label);
+    }
+  });
+
   for (const initialView of views) {
     it(`${initialView}: combines filters, preserves them across scopes/views, and resets hidden dates`, async () => {
       const user = userEvent.setup();
@@ -74,7 +128,7 @@ describe("article filter control wiring", () => {
       counts(3, 5, 4);
       await user.type(screen.getByLabelText("Artikelbeschreibung suchen"), "kaffee");
       counts(3, 3, 2);
-      await user.selectOptions(screen.getByLabelText("Lieferant"), screen.getByRole("option", { name: "Alpha" }));
+      await selectSupplier(user, "Alpha");
       counts(2, 2, 1);
       rows(initialView, initialView === "grouped" ? 1 : 2, "Kaffee", "Alpha");
       exportsDisabled(false);
@@ -113,7 +167,7 @@ describe("article filter control wiring", () => {
       dates("2026-01-01", "2026-01-31");
       await user.type(screen.getByLabelText("Artikelbeschreibung suchen"), "Tee");
       counts(1, 1, 1);
-      await user.selectOptions(screen.getByLabelText("Lieferant"), screen.getByRole("option", { name: "Beta" }));
+      await selectSupplier(user, "Beta");
       counts(0, 0, 0); // Both filters independently match, but their intersection does not.
       for (const view of [initialView, initialView === "grouped" ? "rows" : "grouped"] as const) {
         await user.click(screen.getByTestId(`tab-article-${view}`));
@@ -132,13 +186,13 @@ describe("article filter control wiring", () => {
 
       // Date-only reset must leave the article and supplier filters in place.
       await user.type(screen.getByLabelText("Artikelbeschreibung suchen"), "Kaffee");
-      await user.selectOptions(screen.getByLabelText("Lieferant"), screen.getByRole("option", { name: "Alpha" }));
+      await selectSupplier(user, "Alpha");
       dates("2026-01-01", "2026-01-31");
       counts(2, 2, 1);
       await user.click(screen.getByRole("button", { name: "Zeitraum zurücksetzen" }));
       counts(3, 3, 1);
       expect((screen.getByLabelText("Artikelbeschreibung suchen") as HTMLInputElement).value).toBe("Kaffee");
-      expect((screen.getByLabelText("Lieferant") as HTMLSelectElement).selectedOptions[0].text).toBe("Alpha");
+      expect(screen.getByLabelText("Lieferant").textContent).toBe("Alpha");
       expect(screen.queryByRole("button", { name: "Zeitraum zurücksetzen" })).toBeNull();
     });
   }

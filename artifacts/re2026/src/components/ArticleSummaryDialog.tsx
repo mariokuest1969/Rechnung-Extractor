@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ArticleSupplierSelect } from "@/components/ArticleSupplierSelect";
 import { AlertTriangle, Download, Info, Layers, ListOrdered } from "lucide-react";
 
 const num = (v: number | null | undefined, digits = 2) =>
@@ -172,14 +173,7 @@ export function ArticleSummaryDialog({
             </div>
             <div>
               <Label htmlFor="art-supplier" className="text-xs text-muted-foreground">Lieferant</Label>
-              <select id="art-supplier" value={supplierKey} onChange={(e) => setSupplierKey(e.target.value)}
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" data-testid="select-article-supplier">
-                <option value="">Alle Lieferanten</option>
-                {supplierKey && !suppliers.some((supplier) => supplier.key === supplierKey) && (
-                  <option value={supplierKey}>Lieferant nicht mehr verfügbar</option>
-                )}
-                {suppliers.map((supplier) => <option key={supplier.key} value={supplier.key}>{supplier.label}</option>)}
-              </select>
+              <ArticleSupplierSelect options={suppliers} value={supplierKey} onChange={setSupplierKey} />
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
