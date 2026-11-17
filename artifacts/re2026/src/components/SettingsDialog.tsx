@@ -29,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DropboxAppConnection, useDropboxCallback } from "./DropboxAppConnection";
+import { DropboxExclusions } from "./DropboxExclusions";
 
 export function SettingsDialog() {
   const [open, setOpen]             = useState(false);
@@ -200,6 +201,7 @@ export function SettingsDialog() {
           </div>
 
           <DropboxAppConnection />
+          {open && <DropboxExclusions />}
         </div>
 
         <DialogFooter>

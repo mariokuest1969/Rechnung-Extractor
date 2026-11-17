@@ -5,6 +5,21 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+export interface DropboxExclusion {
+  fileId: string;
+  /** @nullable */
+  filename: string | null;
+  excludedAt: string;
+}
+
+export interface DropboxExclusionSelection {
+  /**
+     * @minLength 1
+     * @maxLength 1024
+     */
+  fileId: string;
+}
+
 export interface InvoicePosition {
   /** @nullable */
   positionsnummer?: string | null;

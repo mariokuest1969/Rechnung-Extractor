@@ -20,3 +20,9 @@ Keep the confirmation step within the same dialog instead of stacking an AlertDi
 **Why:** In this UI, canceling the nested confirmation also dismissed the parent review and discarded selection; outside-interaction guards did not fix it.
 
 **How to apply:** Swap review/confirmation content while retaining selection, and make Cancel explicitly return to review.
+
+Releasing an import exclusion is not an undo of duplicate deletion: it only allows the source PDF to be imported again.
+
+**Why:** The user requires explicit per-file recovery without implying that deleted manual booking metadata can be restored.
+
+**How to apply:** Never clear exclusions implicitly or in bulk as part of settings changes. Explain the loss of manual edits before confirming a selected file's release.

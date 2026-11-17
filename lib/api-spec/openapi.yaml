@@ -147,6 +147,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /settings/dropbox-exclusions:
+    get:
+      operationId: listDropboxExclusions
+      tags: [settings]
+      responses:
+        "200":
+          description: Persistently excluded Dropbox files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DropboxExclusion"
+  /settings/dropbox-exclusions/release:
+    post:
+      operationId: releaseDropboxExclusion
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DropboxExclusionSelection"
+      responses:
+        "204":
+          description: Selected file eligible for next sync
+        "400":
+          description: Invalid selection
+        "404":
+          description: Exclusion no longer exists
   /settings/dropbox-status:
     get:
       operationId: getDropboxStatus
@@ -664,6 +694,24 @@ paths:
 
 components:
   schemas:
+    DropboxExclusion:
+      type: object
+      required: [fileId, filename, excludedAt]
+      properties:
+        fileId:
+          type: string
+        filename:
+          type: ["string", "null"]
+        excludedAt:
+          type: string
+    DropboxExclusionSelection:
+      type: object
+      required: [fileId]
+      properties:
+        fileId:
+          type: string
+          minLength: 1
+          maxLength: 1024
     InvoiceDuplicateReport:
       type: object
       required: [groups, excludedCount]

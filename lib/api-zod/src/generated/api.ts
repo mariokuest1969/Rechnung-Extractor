@@ -129,6 +129,25 @@ export const UpdateSettingsResponse = zod.object({
 })
 
 
+export const ListDropboxExclusionsResponseItem = zod.object({
+  "fileId": zod.string(),
+  "filename": zod.string().nullable(),
+  "excludedAt": zod.string()
+})
+export const ListDropboxExclusionsResponse = zod.array(ListDropboxExclusionsResponseItem)
+
+
+export const releaseDropboxExclusionBodyFileIdMax = 1024;
+
+
+
+export const ReleaseDropboxExclusionBody = zod.object({
+  "fileId": zod.string().min(1).max(releaseDropboxExclusionBodyFileIdMax)
+})
+
+export const ReleaseDropboxExclusionResponse = zod.void()
+
+
 /**
  * @summary Check the live Dropbox connection and configured folder
  */

@@ -411,7 +411,7 @@ router.post("/invoice-duplicates/delete", async (req, res) => {
     if (!canDeleteDuplicateCopies(invoices, ids)) return null;
     const selected = new Set(ids);
     const exclusions = invoices.filter(row => selected.has(row.id) && row.dropboxFileId)
-      .map(row => ({ key: duplicateExclusionPrefix + row.dropboxFileId, value: "1" }));
+      .map(row => ({ key: duplicateExclusionPrefix + row.dropboxFileId, value: JSON.stringify({ filename: row.dateiname }) }));
     if (exclusions.length) await tx.insert(settingsTable).values(exclusions).onConflictDoNothing();
     return await tx.delete(invoicesTable).where(inArray(invoicesTable.id, ids)).returning({ id: invoicesTable.id });
   });

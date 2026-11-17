@@ -6,8 +6,10 @@ import { GetDropboxStatusResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { getDropboxOAuthToken } from "../lib/dropbox-oauth";
 import { assertDropboxConnection, checkDropboxResponse, DropboxAuthError, resetDropboxConnection } from "../lib/dropbox-connection";
+import dropboxExclusionsRouter from "./dropbox-exclusions";
 
 const router: IRouter = Router();
+router.use(dropboxExclusionsRouter);
 
 const SETTING_DROPBOX_FOLDER = "dropbox_folder";
 const SETTING_DROPBOX_TOKEN  = "dropbox_token";

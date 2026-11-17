@@ -3,6 +3,7 @@ import { test, after, mock } from "node:test";
 import { once } from "node:events";
 import express from "express";
 import router from "../../src/routes/invoices";
+import exclusionsRouter from "../../src/routes/dropbox-exclusions";
 import { client, db } from "./store";
 import { ExtractPreviewResponse, BulkUpdateInvoicesBody } from "@workspace/api-zod";
 import { extractPreviews } from "../../../re2026/src/lib/upload-preview";
@@ -13,6 +14,7 @@ const app = express();
 app.use(express.json());
 app.use((req, _res, next) => { req.log = { error() {} } as any; next(); });
 app.use(router);
+app.use(exclusionsRouter);
 app.use((err: { status?: number; message?: string; cause?: { message?: string } }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   res.status(err.status ?? 500).json({ error: err.cause?.message ?? err.message ?? "Request failed" });
 });
@@ -29,6 +31,31 @@ async function duplicateRequest(path = "", ids?: number[]) {
   return { status: response.status, body: await response.json() };
 }
 after(async () => { server.close(); await client.end(); });
+test("exclusions list supports legacy entries and releases only the selected file", async () => {
+  const prefix = "dropbox_duplicate_excluded:";
+  await client.query("INSERT INTO settings (key,value) VALUES ($1,$2),($3,$4),($5,$6)", [
+    prefix + "legacy-id", "1", prefix + "new-id", JSON.stringify({ filename: "review.pdf" }),
+    "dropbox_token", "not-a-real-token",
+  ]);
+  const base = `http://127.0.0.1:${address.port}/settings/dropbox-exclusions`;
+  const list = await (await fetch(base)).json();
+  assert.equal(list.length, 2);
+  assert.equal(list.find((row: any) => row.fileId === "legacy-id").filename, null);
+  assert.equal(list.find((row: any) => row.fileId === "new-id").filename, "review.pdf");
+  const release = (body: unknown) => fetch(base + "/release", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  assert.equal((await release({})).status, 400);
+  assert.equal((await release({ fileId: "" })).status, 400);
+  assert.equal((await release({ fileId: ["legacy-id", "new-id"] })).status, 400);
+  assert.equal((await release({ fileId: "dropbox_token" })).status, 404);
+  assert.equal((await release({ fileId: "legacy-id" })).status, 204);
+  assert.equal((await release({ fileId: "legacy-id" })).status, 404);
+  const remaining = await (await fetch(base)).json();
+  assert.deepEqual(remaining.map((row: any) => row.fileId), ["new-id"]);
+  assert.equal((await client.query("SELECT value FROM settings WHERE key='dropbox_token'")).rows[0].value, "not-a-real-token");
+  await client.query("DELETE FROM settings");
+});
 test("duplicate review and deletion retain originals and atomically suppress Dropbox reimport", async () => {
   const { rows } = await client.query(`
     INSERT INTO invoices (rechnungssteller,rechnungsnummer,datum,brutto_betrag,waehrung,dropbox_file_id)

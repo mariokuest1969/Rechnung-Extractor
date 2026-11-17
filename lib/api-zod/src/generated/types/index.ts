@@ -21,6 +21,8 @@ export * from './dropboxCleanupResult';
 export * from './dropboxConnectionStatus';
 export * from './dropboxConnectionStatusConnectionMethod';
 export * from './dropboxConnectionStatusState';
+export * from './dropboxExclusion';
+export * from './dropboxExclusionSelection';
 export * from './dropboxLinkResponse';
 export * from './dropboxReconnectError';
 export * from './dropboxReconnectErrorCode';

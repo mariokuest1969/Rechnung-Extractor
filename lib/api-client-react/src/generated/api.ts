@@ -37,6 +37,8 @@ import type {
   DropboxCallbackInput,
   DropboxCleanupResult,
   DropboxConnectionStatus,
+  DropboxExclusion,
+  DropboxExclusionSelection,
   DropboxLinkResponse,
   DropboxReconnectError,
   DropboxSyncResult,
@@ -819,6 +821,183 @@ export const useUpdateSettings = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUpdateSettingsMutationOptions(options), queryClient);
+    }
+
+export const getListDropboxExclusionsUrl = () => {
+
+
+
+
+  return `/api/settings/dropbox-exclusions`
+}
+
+export const listDropboxExclusions = async ( options?: Parameters<typeof customFetch>[1]): Promise<DropboxExclusion[]> => {
+
+  return customFetch<DropboxExclusion[]>(getListDropboxExclusionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDropboxExclusionsQueryKey = () => {
+    return [
+    `/api/settings/dropbox-exclusions`
+    ] as const;
+    }
+
+
+export const getListDropboxExclusionsQueryOptions = <TData = Awaited<ReturnType<typeof listDropboxExclusions>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDropboxExclusions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDropboxExclusionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDropboxExclusions>>> = ({ signal }) => listDropboxExclusions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDropboxExclusions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListDropboxExclusionsQueryResult = NonNullable<Awaited<ReturnType<typeof listDropboxExclusions>>>
+export type ListDropboxExclusionsQueryError = ErrorType<unknown>
+
+
+export function useListDropboxExclusions<TData = Awaited<ReturnType<typeof listDropboxExclusions>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDropboxExclusions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDropboxExclusions>>,
+          TError,
+          Awaited<ReturnType<typeof listDropboxExclusions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDropboxExclusions<TData = Awaited<ReturnType<typeof listDropboxExclusions>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDropboxExclusions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDropboxExclusions>>,
+          TError,
+          Awaited<ReturnType<typeof listDropboxExclusions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDropboxExclusions<TData = Awaited<ReturnType<typeof listDropboxExclusions>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDropboxExclusions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListDropboxExclusions<TData = Awaited<ReturnType<typeof listDropboxExclusions>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDropboxExclusions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListDropboxExclusionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReleaseDropboxExclusionUrl = () => {
+
+
+
+
+  return `/api/settings/dropbox-exclusions/release`
+}
+
+export const releaseDropboxExclusion = async (dropboxExclusionSelection: DropboxExclusionSelection, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getReleaseDropboxExclusionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(dropboxExclusionSelection)
+  }
+);}
+
+
+
+
+
+export const getReleaseDropboxExclusionMutationKey = () => ['releaseDropboxExclusion'] as const;
+
+export const getReleaseDropboxExclusionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseDropboxExclusion>>, TError,ReleaseDropboxExclusionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof releaseDropboxExclusion>>, TError,ReleaseDropboxExclusionMutationVariables, TContext> => {
+
+const mutationKey = getReleaseDropboxExclusionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof releaseDropboxExclusion>>, ReleaseDropboxExclusionMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  releaseDropboxExclusion(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReleaseDropboxExclusionMutationResult = NonNullable<Awaited<ReturnType<typeof releaseDropboxExclusion>>>
+    export type ReleaseDropboxExclusionMutationBody = BodyType<DropboxExclusionSelection>
+    export type ReleaseDropboxExclusionMutationError = ErrorType<void>
+    export type ReleaseDropboxExclusionMutationVariables = {data: BodyType<DropboxExclusionSelection>}
+
+    export const useReleaseDropboxExclusion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseDropboxExclusion>>, TError,ReleaseDropboxExclusionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof releaseDropboxExclusion>>,
+        TError,
+        ReleaseDropboxExclusionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReleaseDropboxExclusionMutationOptions(options), queryClient);
     }
 
 export const getGetDropboxStatusUrl = () => {
