@@ -924,6 +924,21 @@ components:
         - createdAt
         - bearbeitungsstatus
       properties:
+        steuerModus:
+          type: string
+          enum: [single, split]
+        netto7:
+          type: ["number", "null"]
+        netto19:
+          type: ["number", "null"]
+        netto0:
+          type: ["number", "null"]
+        steuer7:
+          type: ["number", "null"]
+        steuer19:
+          type: ["number", "null"]
+        steuer0:
+          type: ["number", "null"]
         bearbeitungsstatus:
           $ref: "#/components/schemas/InvoiceReviewStatus"
         id:
@@ -997,9 +1012,25 @@ components:
         bruttobetrag:
           type: ["number", "null"]
 
+    InvoiceSplitAmount:
+      type: ["number", "null"]
+      minimum: -9999999999.99
+      maximum: 9999999999.99
+      multipleOf: 0.01
+
     InvoiceUpdate:
       type: object
       properties:
+        steuerModus:
+          type: string
+          enum: [single, split]
+          description: Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.
+        netto7:
+          $ref: "#/components/schemas/InvoiceSplitAmount"
+        netto19:
+          $ref: "#/components/schemas/InvoiceSplitAmount"
+        netto0:
+          $ref: "#/components/schemas/InvoiceSplitAmount"
         bearbeitungsstatus:
           $ref: "#/components/schemas/InvoiceReviewStatus"
         rechnungssteller:

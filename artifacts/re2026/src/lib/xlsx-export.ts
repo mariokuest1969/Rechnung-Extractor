@@ -1,5 +1,6 @@
 import writeExcelFile, { type SheetData } from "write-excel-file/browser";
 import type { Invoice } from "@workspace/api-client-react";
+import { TAX_EXPORT_HEADERS, invoiceTaxExportValues } from "./invoice-tax-export";
 import { createPositionExportObjects } from "./position-export";
 import { articleExportFilename, type ArticleExportTable, type ArticleView } from "./article-summary-export";
 
@@ -52,6 +53,7 @@ export function createInvoiceExcelSheet(invoices: Invoice[]) {
     "Feld 1":          inv.freifeld1 ?? "",
     "Feld 2":          inv.freifeld2 ?? "",
     "Feld 3":          inv.freifeld3 ?? "",
+    ...Object.fromEntries(TAX_EXPORT_HEADERS.map((header, index) => [header, invoiceTaxExportValues(inv)[index]])),
   }));
 
   // Fixed headers also produce a useful workbook when there are no invoices.
@@ -59,13 +61,14 @@ export function createInvoiceExcelSheet(invoices: Invoice[]) {
     "Dateiname", "Rechnungssteller", "Datum", "Rechnungsnummer", "Brutto (€)",
     "MwSt %", "Steuer (€)", "Netto (€)", "Währung", "Buchungstext",
     "Bemerkung", "Feld 1", "Feld 2", "Feld 3",
+    ...TAX_EXPORT_HEADERS,
   ];
   return {
     data: createSheetData(rows, headers),
     options: {
       sheet: "Rechnungen",
       stickyRowsCount: 1,
-      columns: [36, 28, 12, 20, 14, 8, 14, 14, 8, 24, 24, 16, 16, 16]
+      columns: [36, 28, 12, 20, 14, 8, 14, 14, 8, 24, 24, 16, 16, 16, 30, 16, 16, 16, 16, 16, 16]
         .map((width) => ({ width })),
     },
   };

@@ -6,8 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { InvoiceReviewStatus } from './invoiceReviewStatus';
+import type { InvoiceSplitAmount } from './invoiceSplitAmount';
+import type { InvoiceUpdateSteuerModus } from './invoiceUpdateSteuerModus';
 
 export interface InvoiceUpdate {
+  /** Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals. */
+  steuerModus?: InvoiceUpdateSteuerModus;
+  netto7?: InvoiceSplitAmount | null;
+  netto19?: InvoiceSplitAmount | null;
+  netto0?: InvoiceSplitAmount | null;
   bearbeitungsstatus?: InvoiceReviewStatus;
   /** @nullable */
   rechnungssteller?: string | null;

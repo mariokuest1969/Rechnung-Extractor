@@ -3,6 +3,7 @@
   "compileOnSave": false,
   "files": [],
   "references": [
+    { "path": "./lib/invoice-tax" },
     {
       "path": "./lib/db"
     },

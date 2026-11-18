@@ -57,7 +57,8 @@ for (const value of [
     const invoices = await download(() => exportInvoicesToCSV([data]));
     const positions = await download(() => exportInvoicePositionsToCSV([data]));
     assert.equal(invoices.content.slice(invoices.content.indexOf("\n") + 1),
-      [safe, safe, safe, safe, "-119,5", "0", "-19,5", "-100", value ? safe : "EUR", safe].map(quoted).join(";"));
+      [safe, safe, safe, safe, "-119,5", "0", "-19,5", "-100", value ? safe : "EUR", safe,
+        "Einzelsteuer / ohne Aufteilung", "", "", "", "", "", ""].map(quoted).join(";"));
     assert.equal(positions.content.slice(positions.content.indexOf("\n") + 1),
       [safe, safe, safe, safe, safe, safe, -2, safe, -50.25, 0, -100.5, -119.595, safe].map(quoted).join(";"));
     assert.equal(positions.result, 1);
@@ -73,7 +74,7 @@ for (const value of [
 test("missing invoice amounts stay empty and positionless invoices do not download", async () => {
   const data: Invoice = { id: 1, createdAt: "2026-01-01" };
   const output = await download(() => exportInvoicesToCSV([data]));
-  assert.ok(output.content.endsWith('\n"";"";"";"";"";"";"";"";"EUR";""'));
+  assert.ok(output.content.endsWith('\n"";"";"";"";"";"";"";"";"EUR";"";"Einzelsteuer / ohne Aufteilung";"";"";"";"";"";""'));
   const empty = await download(() => exportInvoicePositionsToCSV([data]));
   assert.equal(empty.result, 0);
   assert.equal(empty.clicked, false);

@@ -7,8 +7,22 @@
  */
 import type { InvoicePosition } from './invoicePosition';
 import type { InvoiceReviewStatus } from './invoiceReviewStatus';
+import type { InvoiceSteuerModus } from './invoiceSteuerModus';
 
 export interface Invoice {
+  steuerModus?: InvoiceSteuerModus;
+  /** @nullable */
+  netto7?: number | null;
+  /** @nullable */
+  netto19?: number | null;
+  /** @nullable */
+  netto0?: number | null;
+  /** @nullable */
+  steuer7?: number | null;
+  /** @nullable */
+  steuer19?: number | null;
+  /** @nullable */
+  steuer0?: number | null;
   bearbeitungsstatus: InvoiceReviewStatus;
   id: number;
   /** @nullable */

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { TaxSplitError } from "@workspace/invoice-tax";
+import { taxUpdate } from "../lib/invoice-tax-update";
 import { hashPdf, signPdfFingerprint, verifyPdfFingerprint } from "../lib/pdf-fingerprint";
 import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
@@ -64,6 +66,7 @@ const confirmedInvoice = UpdateInvoiceBody.extend(ExtractPreviewResponseItem.omi
 const confirmedInvoices = confirmedInvoice.array().min(1);
 function toInsertInvoice(item: ReturnType<typeof confirmedInvoice.parse>): typeof invoicesTable.$inferInsert {
   const { status: _status, error: _error, pdfFingerprintToken: _token, ...invoice } = item;
+  const split = taxUpdate({}, item);
   return {
     ...invoice,
     bearbeitungsstatus: "unreviewed",
@@ -84,6 +87,11 @@ function toInsertInvoice(item: ReturnType<typeof confirmedInvoice.parse>): typeo
       nettobetrag: p.nettobetrag ?? null,
       bruttobetrag: p.bruttobetrag ?? null,
     })),
+    ...split,
+    steuerModus: item.steuerModus ?? "single",
+    netto7: split.netto7 ?? null,
+    netto19: split.netto19 ?? null,
+    netto0: split.netto0 ?? null,
   };
 }
 
@@ -98,6 +106,13 @@ function toApiInvoice(row: typeof invoicesTable.$inferSelect) {
     steuersatz: row.steuersatz != null ? parseFloat(row.steuersatz) : null,
     steuerBetrag: row.steuerBetrag != null ? parseFloat(row.steuerBetrag) : null,
     nettoBetrag: row.nettoBetrag != null ? parseFloat(row.nettoBetrag) : null,
+    steuerModus: row.steuerModus ?? "single",
+    netto7: row.netto7 == null ? null : Number(row.netto7),
+    netto19: row.netto19 == null ? null : Number(row.netto19),
+    netto0: row.netto0 == null ? null : Number(row.netto0),
+    steuer7: row.steuer7 == null ? null : Number(row.steuer7),
+    steuer19: row.steuer19 == null ? null : Number(row.steuer19),
+    steuer0: row.steuer0 == null ? null : Number(row.steuer0),
     waehrung: row.waehrung ?? null,
     bemerkung: row.bemerkung ?? null,
     freifeld1: row.freifeld1 ?? null,
@@ -144,10 +159,11 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
         rechnungssteller: extracted.rechnungssteller ?? inv.rechnungssteller,
         datum: extracted.datum ?? inv.datum,
         rechnungsnummer: extracted.rechnungsnummer ?? inv.rechnungsnummer,
-        bruttoBetrag: extracted.bruttoBetrag != null ? String(extracted.bruttoBetrag) : inv.bruttoBetrag,
-        steuersatz: extracted.steuersatz != null ? String(extracted.steuersatz) : inv.steuersatz,
-        steuerBetrag: extracted.steuerBetrag != null ? String(extracted.steuerBetrag) : inv.steuerBetrag,
-        nettoBetrag: extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : inv.nettoBetrag,
+        // Evaluate the mode at commit time, not from the pre-extraction snapshot.
+        bruttoBetrag: sql`CASE WHEN ${invoicesTable.steuerModus} = 'split' THEN ${invoicesTable.bruttoBetrag} ELSE ${extracted.bruttoBetrag != null ? String(extracted.bruttoBetrag) : inv.bruttoBetrag}::numeric END`,
+        steuersatz: sql`CASE WHEN ${invoicesTable.steuerModus} = 'split' THEN ${invoicesTable.steuersatz} ELSE ${extracted.steuersatz != null ? String(extracted.steuersatz) : inv.steuersatz}::numeric END`,
+        steuerBetrag: sql`CASE WHEN ${invoicesTable.steuerModus} = 'split' THEN ${invoicesTable.steuerBetrag} ELSE ${extracted.steuerBetrag != null ? String(extracted.steuerBetrag) : inv.steuerBetrag}::numeric END`,
+        nettoBetrag: sql`CASE WHEN ${invoicesTable.steuerModus} = 'split' THEN ${invoicesTable.nettoBetrag} ELSE ${extracted.nettoBetrag != null ? String(extracted.nettoBetrag) : inv.nettoBetrag}::numeric END`,
         waehrung: extracted.waehrung ?? inv.waehrung,
         bemerkung: extracted.bemerkung ?? inv.bemerkung,
         positionen: keepExistingPositionsWhenExtractionIsEmpty(
@@ -270,7 +286,12 @@ router.post("/invoices/upload-confirmed", async (req, res): Promise<void> => {
       res.status(400).json({ error: "Dateinachweis ungültig oder abgelaufen. Bitte die PDF erneut auslesen; es wurde nichts gespeichert." });
       return;
     }
-    values.push({ ...toInsertInvoice(item), pdfSha256 });
+    try {
+      values.push({ ...toInsertInvoice(item), pdfSha256 });
+    } catch (error) {
+      if (!(error instanceof TaxSplitError)) throw error;
+      res.status(400).json({ error: error.message }); return;
+    }
   }
   const created = await db.insert(invoicesTable).values(values).returning();
   res.json(created.map(toApiInvoice));
@@ -324,7 +345,9 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
       const rows = await tx
         .select()
         .from(invoicesTable)
-        .where(inArray(invoicesTable.id, numericIds));
+        .where(inArray(invoicesTable.id, numericIds)).for("update");
+      // Reject the whole selection rather than silently overwriting or skipping split invoices.
+      if (rows.some(inv => inv.steuerModus === "split")) return null;
       let count = 0;
       for (const inv of rows) {
         const perUpdate: Record<string, unknown> = { ...update, steuersatz: String(rate) };
@@ -340,6 +363,9 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
       }
       return count;
     });
+    if (updated === null) {
+      res.status(400).json({ error: "Die Auswahl enthält Rechnungen mit Nettoaufteilung. Ein gemeinsamer MwSt-Satz ist nicht möglich; es wurde nichts geändert." }); return;
+    }
     res.json({ updated });
     return;
   }
@@ -520,8 +546,20 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (d.buchungskonto2 !== undefined) update.buchungskonto2 = d.buchungskonto2;
   if (d.buchungskonto2Betrag !== undefined) update.buchungskonto2Betrag = d.buchungskonto2Betrag != null ? String(d.buchungskonto2Betrag) : null;
   if (d.buchungstext !== undefined) update.buchungstext = d.buchungstext;
-  if (Object.keys(update).length === 0) { res.status(400).json({ error: "Keine Felder" }); return; }
-  const [row] = await db.update(invoicesTable).set(update).where(eq(invoicesTable.id, params.data.id)).returning();
+  let row;
+  try {
+    row = await db.transaction(async tx => {
+      const [current] = await tx.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id)).for("update");
+      if (!current) return undefined;
+      Object.assign(update, taxUpdate(current, d));
+      if (Object.keys(update).length === 0) throw new TaxSplitError("Keine Felder");
+      const [saved] = await tx.update(invoicesTable).set(update).where(eq(invoicesTable.id, params.data.id)).returning();
+      return saved;
+    });
+  } catch (error) {
+    if (!(error instanceof TaxSplitError)) throw error;
+    res.status(400).json({ error: error.message }); return;
+  }
   if (!row) { res.status(404).json({ error: "Rechnung nicht gefunden" }); return; }
   res.json(toApiInvoice(row));
 });

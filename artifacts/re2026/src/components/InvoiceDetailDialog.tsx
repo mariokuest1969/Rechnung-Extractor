@@ -25,6 +25,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { InvoiceStatusSelect } from "./InvoiceStatusSelect";
+import { InvoiceTaxEditor } from "./InvoiceTaxEditor";
 import { formatNumber } from "@/lib/format";
 import { FileText, Loader2, Crosshair, ChevronLeft, ChevronRight, X, Calculator } from "lucide-react";
 
@@ -339,6 +340,7 @@ export function InvoiceDetailDialog({
   const [captureField, setCaptureField] = useState<keyof Invoice | null>(null);
 
   useEffect(() => { if (!open) setCaptureField(null); }, [open]);
+  useEffect(() => { setCaptureField(null); }, [invoice?.steuerModus]);
 
   const [taxError, setTaxError] = useState<string>();
   const [taxDraft, setTaxDraft] = useState<string | undefined>();
@@ -357,6 +359,10 @@ export function InvoiceDetailDialog({
   // ── Update with optional auto-calc ────────────────────────────────────────
   const handleUpdate = useCallback(async (field: keyof Invoice, rawValue: string | null) => {
     if (!invoice) return;
+    if (invoice.steuerModus === "split" && ["bruttoBetrag", "steuerBetrag", "nettoBetrag", "steuersatz"].includes(field)) {
+      toast.error("Bitte die Nettoaufteilung bearbeiten; Summen werden berechnet.");
+      return false;
+    }
 
     let parsedValue: string | number | null = rawValue;
     if (field === "steuersatz") {
@@ -403,7 +409,7 @@ export function InvoiceDetailDialog({
       return false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoice?.id, invoice?.bruttoBetrag, invoice?.steuersatz]);
+  }, [invoice?.id, invoice?.bruttoBetrag, invoice?.steuersatz, invoice?.steuerModus]);
 
   const handleCapture = useCallback(async (text: string) => {
     if (!captureField || !invoice) return;
@@ -428,7 +434,7 @@ export function InvoiceDetailDialog({
   const title = invoice.rechnungssteller || invoice.dateiname || `Rechnung #${invoice.id}`;
 
   // Whether brutto+mwst are both present → auto-calc is active
-  const hasAutoCalc = invoice.bruttoBetrag != null && invoice.steuersatz != null;
+   const hasAutoCalc = invoice.steuerModus !== "split" && invoice.bruttoBetrag != null && invoice.steuersatz != null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -514,7 +520,8 @@ export function InvoiceDetailDialog({
               </div>
 
             {/* Beträge */}
-              <>
+              <InvoiceTaxEditor key={`${invoice.id}-${open}`} invoice={invoice}
+                onSave={data => updateMutation.mutateAsync({ id: invoice.id, data })}>
                 {/* Brutto + MwSt % row */}
                   <div className="grid gap-3 grid-cols-2">
                       <DetailField
@@ -555,7 +562,7 @@ export function InvoiceDetailDialog({
                     Steuer und Netto werden automatisch aus Brutto × MwSt % berechnet.
                   </p>
                 )}
-              </>
+              </InvoiceTaxEditor>
 
             {/* Währung */}
               <DetailField label="Währung" value={invoice.waehrung} {...fieldProps("waehrung")} />

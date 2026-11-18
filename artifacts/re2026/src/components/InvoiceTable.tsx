@@ -108,6 +108,12 @@ const COLUMN_DEFS = [
   { id: "mwst",             label: "MwSt %",            sortable: true,  align: "right" },
   { id: "steuer",           label: "Steuer",            sortable: true,  align: "right" },
   { id: "netto",            label: "Netto",             sortable: true,  align: "right" },
+  { id: "netto7", label: "Netto 7 %", sortable: true, align: "right" },
+  { id: "netto19", label: "Netto 19 %", sortable: true, align: "right" },
+  { id: "netto0", label: "Netto 0 %", sortable: true, align: "right" },
+  { id: "steuer7", label: "Steuer 7 %", sortable: true, align: "right" },
+  { id: "steuer19", label: "Steuer 19 %", sortable: true, align: "right" },
+  { id: "steuer0", label: "Steuer 0 %", sortable: true, align: "right" },
   { id: "waehrung",         label: "Währung",           sortable: true,  align: "left"  },
   { id: "buchung",          label: "Buchung",           sortable: false, align: "left"  },
   { id: "bemerkung",        label: "Bemerkung",         sortable: true,  align: "left"  },
@@ -183,6 +189,8 @@ function getSortValue(inv: Invoice, field: SortField, lieferantenMap: Map<number
     case "mwst":             return (typeof inv.steuersatz === "number" ? inv.steuersatz : parseFloat(String(inv.steuersatz ?? "")) || -Infinity);
     case "steuer":           return inv.steuerBetrag ?? -Infinity;
     case "netto":            return inv.nettoBetrag ?? -Infinity;
+    case "netto7": case "netto19": case "netto0":
+    case "steuer7": case "steuer19": case "steuer0": return inv[field] ?? -Infinity;
     case "waehrung":         return inv.waehrung ?? "";
     case "buchung":          return inv.buchungskonto1 ?? "";
     case "bemerkung":        return inv.bemerkung ?? "";
@@ -342,6 +350,7 @@ function BulkEditDialog({
           {/* MwSt % */}
           <div>
             <FieldLabel>MwSt %</FieldLabel>
+            <p className="text-xs text-muted-foreground mb-1">Enthält die Auswahl eine Nettoaufteilung, wird eine gemeinsame Satzänderung vollständig abgewiesen. Andere Sammeländerungen bleiben möglich.</p>
             <div className="flex gap-1.5 items-center">
               {MWST_PRESETS.map((r) => (
                 <button
@@ -1342,6 +1351,20 @@ export function InvoiceTable() {
                     </td>
 
                     {orderedVisibleCols.map((colId) => {
+                      if (["netto7", "netto19", "netto0", "steuer7", "steuer19", "steuer0"].includes(colId)) {
+                        const value = inv.steuerModus === "split" ? inv[colId as "netto7" | "netto19" | "netto0" | "steuer7" | "steuer19" | "steuer0"] : null;
+                        return <td key={colId} className="px-4 py-2 text-right font-mono">
+                          {value == null ? "—" : formatNumber(value)}
+                        </td>;
+                      }
+                      if (inv.steuerModus === "split" && ["brutto", "mwst", "steuer", "netto"].includes(colId)) {
+                        const value = colId === "brutto" ? inv.bruttoBetrag : colId === "steuer" ? inv.steuerBetrag : inv.nettoBetrag;
+                        return <td key={colId} className="px-4 py-2 text-right font-mono">
+                          <button title="Nettoaufteilung bearbeiten" onClick={() => setDetailInvoiceId(inv.id)}>
+                            {colId === "mwst" ? "7/19/0" : value == null ? "—" : formatNumber(value)}
+                          </button>
+                        </td>;
+                      }
                       switch (colId) {
                         case "bearbeitungsstatus":
                           return <td key={colId} className="px-4 py-2" onClick={e => e.stopPropagation()}>

@@ -28,6 +28,14 @@ export const InvoiceDuplicateGroupMatchType = {
   metadata: 'metadata',
 } as const;
 
+export type InvoiceSteuerModus = typeof InvoiceSteuerModus[keyof typeof InvoiceSteuerModus];
+
+
+export const InvoiceSteuerModus = {
+  single: 'single',
+  split: 'split',
+} as const;
+
 /**
  * Explicit human review state; imports are always unreviewed.
  */
@@ -59,6 +67,19 @@ export interface InvoicePosition {
 }
 
 export interface Invoice {
+  steuerModus?: InvoiceSteuerModus;
+  /** @nullable */
+  netto7?: number | null;
+  /** @nullable */
+  netto19?: number | null;
+  /** @nullable */
+  netto0?: number | null;
+  /** @nullable */
+  steuer7?: number | null;
+  /** @nullable */
+  steuer19?: number | null;
+  /** @nullable */
+  steuer0?: number | null;
   bearbeitungsstatus: InvoiceReviewStatus;
   id: number;
   /** @nullable */
@@ -237,7 +258,30 @@ export interface BuchungskontoCreate {
   bezeichnung: string;
 }
 
+/**
+ * @minimum -9999999999.99
+ * @maximum 9999999999.99
+ * @nullable
+ */
+export type InvoiceSplitAmount = number | null;
+
+/**
+ * Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.
+ */
+export type InvoiceUpdateSteuerModus = typeof InvoiceUpdateSteuerModus[keyof typeof InvoiceUpdateSteuerModus];
+
+
+export const InvoiceUpdateSteuerModus = {
+  single: 'single',
+  split: 'split',
+} as const;
+
 export interface InvoiceUpdate {
+  /** Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals. */
+  steuerModus?: InvoiceUpdateSteuerModus;
+  netto7?: InvoiceSplitAmount | null;
+  netto19?: InvoiceSplitAmount | null;
+  netto0?: InvoiceSplitAmount | null;
   bearbeitungsstatus?: InvoiceReviewStatus;
   /** @nullable */
   rechnungssteller?: string | null;

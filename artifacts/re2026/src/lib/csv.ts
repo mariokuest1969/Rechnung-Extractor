@@ -1,4 +1,5 @@
 import type { Invoice } from "@workspace/api-client-react";
+import { TAX_EXPORT_HEADERS, invoiceTaxExportValues } from "./invoice-tax-export";
 import { POSITION_EXPORT_HEADERS, createPositionExportRows } from "./position-export";
 import { articleCsvCell, articleExportFilename, type ArticleExportTable, type ArticleView } from "./article-summary-export";
 
@@ -26,7 +27,7 @@ function downloadCSV(headers: string[], rows: unknown[][], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function exportInvoicesToCSV(invoices: Invoice[]) {
+export function createInvoiceCSVTable(invoices: Invoice[]) {
   const headers = [
     "Dateiname",
     "Rechnungssteller",
@@ -37,7 +38,8 @@ export function exportInvoicesToCSV(invoices: Invoice[]) {
     "Steuer",
     "Netto",
     "Währung",
-    "Bemerkung"
+    "Bemerkung",
+    ...TAX_EXPORT_HEADERS,
   ];
 
   const rows = invoices.map(inv => [
@@ -50,9 +52,13 @@ export function exportInvoicesToCSV(invoices: Invoice[]) {
     inv.steuerBetrag ?? "",
     inv.nettoBetrag ?? "",
     inv.waehrung || "EUR",
-    inv.bemerkung || ""
+    inv.bemerkung || "",
+    ...invoiceTaxExportValues(inv),
   ].map(articleCsvCell));
-
+  return { headers, rows };
+}
+export function exportInvoicesToCSV(invoices: Invoice[]) {
+  const { headers, rows } = createInvoiceCSVTable(invoices);
   downloadCSV(
     headers,
     rows,

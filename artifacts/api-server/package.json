@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@workspace/invoice-tax": "workspace:*",
     "@napi-rs/canvas": "^0.1.80",
     "@clerk/express": "^2.1.33",
     "@clerk/shared": "^4.22.1",

@@ -24,6 +24,13 @@ export const invoicesTable = pgTable("invoices", {
   steuersatz: numeric("steuersatz", { precision: 5, scale: 2 }),
   steuerBetrag: numeric("steuer_betrag", { precision: 12, scale: 2 }),
   nettoBetrag: numeric("netto_betrag", { precision: 12, scale: 2 }),
+  steuerModus: text("steuer_modus", { enum: ["single", "split"] }).notNull().default("single"),
+  netto7: numeric("netto7", { precision: 12, scale: 2 }),
+  netto19: numeric("netto19", { precision: 12, scale: 2 }),
+  netto0: numeric("netto0", { precision: 12, scale: 2 }),
+  steuer7: numeric("steuer7", { precision: 12, scale: 2 }),
+  steuer19: numeric("steuer19", { precision: 12, scale: 2 }),
+  steuer0: numeric("steuer0", { precision: 12, scale: 2 }),
   waehrung: text("waehrung").default("EUR"),
   bemerkung: text("bemerkung"),
   freifeld1: text("freifeld1"),
@@ -42,6 +49,7 @@ export const invoicesTable = pgTable("invoices", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   check("invoices_review_status_check", sql`${table.bearbeitungsstatus} IN ('unreviewed', 'to_review', 'done')`),
+  check("invoices_tax_mode_check", sql`${table.steuerModus} IN ('single', 'split')`),
 ]);
 
 export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true });

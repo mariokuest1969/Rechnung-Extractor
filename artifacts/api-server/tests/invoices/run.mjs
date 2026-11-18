@@ -12,6 +12,7 @@ try {
     outfile: `${dir}/tests.mjs`, bundle: true, platform: "node", format: "esm",
     packages: "external",
     alias: {
+      "@workspace/invoice-tax": fileURLToPath(new URL("../../../../lib/invoice-tax/src/index.ts", import.meta.url)),
       "@workspace/db": fileURLToPath(new URL("store.ts", import.meta.url)),
       "@workspace/api-zod": fileURLToPath(new URL("../../../../lib/api-zod/src/index.ts", import.meta.url)),
     },

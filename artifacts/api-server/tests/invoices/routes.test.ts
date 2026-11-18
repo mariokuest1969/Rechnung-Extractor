@@ -9,6 +9,7 @@ import { ExtractPreviewResponse, BulkUpdateInvoicesBody } from "@workspace/api-z
 import { extractPreviews } from "../../../re2026/src/lib/upload-preview";
 import { parseInvoiceId, parseInvoiceIds } from "../../src/lib/invoice-ids";
 import { previewDeadline } from "../../src/lib/preview-deadline";
+import { calculateTaxSplit } from "@workspace/invoice-tax";
 
 const app = express();
 app.use(express.json());
@@ -102,6 +103,123 @@ async function upload(files: { content: string; type?: string }[], path = "/uplo
   const response = await fetch(url + path, { method: "POST", body: form });
   return { status: response.status, body: await response.json() };
 }
+
+test("split calculation rounds each rate in cents and rejects invalid inputs and derived overflow", () => {
+  for (const sign of [1, -1]) {
+    const result = calculateTaxSplit({ netto7: sign * 0.5, netto19: sign * 0.5, netto0: 0 });
+    assert.equal(result.steuer7, sign * 0.04);
+    assert.equal(result.steuer19, sign * 0.10);
+    assert.equal(result.steuer0, 0);
+    assert.equal(result.steuerBetrag, sign * 0.14);
+    assert.equal(result.bruttoBetrag, sign * 1.14);
+  }
+  assert.deepEqual(calculateTaxSplit({ netto7: null, netto19: null, netto0: 0 }), {
+    steuerModus: "split", steuersatz: null, netto7: null, netto19: null, netto0: 0,
+    steuer7: null, steuer19: null, steuer0: 0, nettoBetrag: 0, steuerBetrag: 0, bruttoBetrag: 0,
+  });
+  for (const value of [0.001, 1e-7, -1e-7, Infinity, NaN, 1e10, -1e10]) {
+    assert.throws(() => calculateTaxSplit({ netto7: value, netto19: null, netto0: null }));
+  }
+  assert.throws(() => calculateTaxSplit({ netto7: null, netto19: null, netto0: null }));
+  assert.throws(() => calculateTaxSplit({ netto7: 9999999999.99, netto19: null, netto0: null }), /Gesamtbrutto/);
+  assert.throws(() => calculateTaxSplit({ netto7: 6000000000, netto19: 6000000000, netto0: null }), /Gesamtnetto/);
+});
+
+test("net tax splits persist atomically without inventing legacy allocations or accepting conflicting totals", async () => {
+  const created = await request("/upload-confirmed", "POST", [
+    { dateiname: "legacy-split-test.pdf", bruttoBetrag: 355, nettoBetrag: 310, steuerBetrag: 45, steuersatz: null },
+    { dateiname: "split-test.pdf" },
+  ]);
+  assert.equal(created.status, 200);
+  const [legacy, target] = created.body;
+  const ids = [legacy.id, target.id];
+  try {
+    assert.equal(legacy.steuerModus, "single");
+    assert.equal(legacy.netto7, null);
+    await request(`/${legacy.id}`, "PATCH", { bemerkung: "no inferred allocation" });
+    const unchanged = (await request(`/${legacy.id}`)).body;
+    assert.equal(unchanged.netto7, null);
+    assert.equal(unchanged.bruttoBetrag, 355);
+    const path = `/${target.id}`;
+    const split = await request(path, "PATCH", { steuerModus: "split", netto7: 100, netto19: 200, netto0: 10 });
+    assert.equal(split.status, 200, JSON.stringify(split.body));
+    for (const [key, value] of Object.entries({
+      steuerModus: "split", netto7: 100, netto19: 200, netto0: 10,
+      steuer7: 7, steuer19: 38, steuer0: 0, nettoBetrag: 310, steuerBetrag: 45, bruttoBetrag: 355, steuersatz: null,
+    })) assert.equal(split.body[key], value);
+    assert.deepEqual((await request(path)).body, split.body);
+    assert.deepEqual((await request()).body.find((i: any) => i.id === target.id), split.body);
+
+    const invalid = [
+      { netto7: "7" }, { netto7: 1e-7 }, { netto7: -1e-7 }, { netto7: 0.001 },
+      { netto7: true }, { netto7: [] }, { netto7: {} }, { netto7: 1e10 },
+      { netto7: 9999999999.99 }, { netto7: 6000000000, netto19: 6000000000 },
+      { netto7: null, netto19: null, netto0: null },
+      { steuersatz: 19 }, { bruttoBetrag: 1 }, { nettoBetrag: 1 }, { steuerBetrag: 1 },
+      { steuerModus: "bad" }, { steuerModus: null },
+    ];
+    for (const values of invalid) {
+      const result = await request(path, "PATCH", { ...values, freifeld1: "must not save" });
+      assert.equal(result.status, 400, JSON.stringify(values));
+      assert.ok(result.body.error);
+      assert.deepEqual((await request(path)).body, split.body);
+    }
+    const before = (await request()).body;
+    assert.equal((await request("/bulk-update", "PATCH", { ids, fields: { steuersatz: 7, freifeld1: "must not save" } })).status, 400);
+    assert.deepEqual((await request()).body, before);
+    assert.equal((await request("/bulk-update", "PATCH", { ids, fields: { freifeld1: "metadata only" } })).status, 200);
+    assert.equal((await request(path)).body.bruttoBetrag, 355);
+    assert.equal((await request(path)).body.freifeld1, "metadata only");
+    const credit = await request(path, "PATCH", { netto7: -0.5, netto19: -0.5, netto0: null });
+    assert.equal(credit.body.bruttoBetrag, -1.14);
+    assert.equal(credit.body.steuerBetrag, -0.14);
+    assert.equal(credit.body.steuer0, null);
+    const zero = await request(path, "PATCH", { netto7: null, netto19: null, netto0: 0 });
+    assert.equal(zero.body.bruttoBetrag, 0);
+    assert.equal(zero.body.netto7, null);
+    assert.equal(zero.body.netto0, 0);
+    const single = await request(path, "PATCH", { steuerModus: "single" });
+    assert.equal(single.status, 200);
+    assert.equal(single.body.bruttoBetrag, 0);
+    for (const key of ["netto7", "netto19", "netto0", "steuer7", "steuer19", "steuer0"]) assert.equal(single.body[key], null);
+    assert.equal((await request(path, "PATCH", { netto7: 1 })).status, 400);
+    assert.equal((await request(path, "PATCH", { steuerModus: "split", netto7: 1 })).status, 400);
+    assert.equal((await request(path, "PATCH", { steuersatz: 7.25, bruttoBetrag: -107.25, nettoBetrag: -100, steuerBetrag: -7.25 })).status, 200);
+    assert.equal((await request("/bulk-update", "PATCH", { ids: [target.id], fields: { steuersatz: 0 } })).status, 200);
+    assert.equal((await request(path)).body.nettoBetrag, -107.25);
+    const count = (await request()).body.length;
+    const confirmedSplit = { dateiname: "confirmed-split.pdf", steuerModus: "split", netto7: 100, netto19: null, netto0: 0 };
+    const imported = await request("/upload-confirmed", "POST", [confirmedSplit]);
+    assert.equal(imported.status, 200, JSON.stringify(imported.body));
+    ids.push(imported.body[0].id);
+    assert.equal(imported.body[0].bruttoBetrag, 107);
+    assert.equal((await request("/upload-confirmed", "POST", [
+      confirmedSplit, { dateiname: "invalid-split.pdf", steuerModus: "split", netto7: null, netto19: null, netto0: null },
+    ])).status, 400);
+    assert.equal((await request()).body.length, count + 1);
+  } finally { await request("/bulk-delete", "POST", { ids }); }
+});
+
+test("re-extraction preserves a split activated or edited while extraction is running", async () => {
+  const created = await request("/upload-confirmed", "POST", [{ dateiname: "split-reextract.pdf", bruttoBetrag: 119 }]);
+  const id = created.body[0].id;
+  try {
+    await client.query("UPDATE invoices SET dropbox_file_id=$1 WHERE id=$2", ["split-reextract", id]);
+    const started = await request(`/${id}/reextract`, "POST");
+    const split = await request(`/${id}`, "PATCH", { steuerModus: "split", netto7: 100, netto19: 200, netto0: null });
+    assert.equal(split.status, 200);
+    const edited = await request(`/${id}`, "PATCH", { netto7: -0.5, netto19: -0.5, netto0: 0 });
+    let job;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      job = await request(`/reextract-jobs/${started.body.jobId}`);
+      if (job.body.status !== "processing") break;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.equal(job?.body.status, "success", JSON.stringify(job?.body));
+    for (const key of ["steuerModus", "netto7", "netto19", "netto0", "steuer7", "steuer19", "steuer0", "nettoBetrag", "steuerBetrag", "bruttoBetrag", "steuersatz"])
+      assert.equal(job.body.invoice[key], edited.body[key], key);
+  } finally { await request(`/${id}`, "DELETE"); }
+});
 
 test("review status defaults conservatively, validates atomic changes and survives re-extraction", async () => {
   const direct = await upload([{ content: "%PDF-review-status" }]);

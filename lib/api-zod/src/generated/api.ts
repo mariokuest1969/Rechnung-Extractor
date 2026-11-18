@@ -17,6 +17,13 @@ export const ListInvoiceDuplicatesResponse = zod.object({
   "matchType": zod.enum(['pdf_hash', 'metadata']),
   "key": zod.string(),
   "invoices": zod.array(zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional(),
+  "netto7": zod.number().nullish(),
+  "netto19": zod.number().nullish(),
+  "netto0": zod.number().nullish(),
+  "steuer7": zod.number().nullish(),
+  "steuer19": zod.number().nullish(),
+  "steuer0": zod.number().nullish(),
   "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).describe('Explicit human review state; imports are always unreviewed.'),
   "id": zod.number().int(),
   "rechnungssteller": zod.string().nullish(),
@@ -287,6 +294,13 @@ export const DeleteBuchungskontoResponse = zod.void()
  * @summary List all invoices
  */
 export const ListInvoicesResponseItem = zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional(),
+  "netto7": zod.number().nullish(),
+  "netto19": zod.number().nullish(),
+  "netto0": zod.number().nullish(),
+  "steuer7": zod.number().nullish(),
+  "steuer19": zod.number().nullish(),
+  "steuer0": zod.number().nullish(),
   "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).describe('Explicit human review state; imports are always unreviewed.'),
   "id": zod.number().int(),
   "rechnungssteller": zod.string().nullish(),
@@ -345,6 +359,13 @@ export const GetInvoiceStatsResponse = zod.object({
  * @summary Upload PDF invoices
  */
 export const UploadInvoicesResponseItem = zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional(),
+  "netto7": zod.number().nullish(),
+  "netto19": zod.number().nullish(),
+  "netto0": zod.number().nullish(),
+  "steuer7": zod.number().nullish(),
+  "steuer19": zod.number().nullish(),
+  "steuer0": zod.number().nullish(),
   "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).describe('Explicit human review state; imports are always unreviewed.'),
   "id": zod.number().int(),
   "rechnungssteller": zod.string().nullish(),
@@ -466,6 +487,13 @@ export const GetReextractJobResponse = zod.union([zod.object({
   "status": zod.enum(['success']),
   "createdAt": zod.number().int(),
   "invoice": zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional(),
+  "netto7": zod.number().nullish(),
+  "netto19": zod.number().nullish(),
+  "netto0": zod.number().nullish(),
+  "steuer7": zod.number().nullish(),
+  "steuer19": zod.number().nullish(),
+  "steuer0": zod.number().nullish(),
   "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).describe('Explicit human review state; imports are always unreviewed.'),
   "id": zod.number().int(),
   "rechnungssteller": zod.string().nullish(),
@@ -580,6 +608,13 @@ export const GetInvoiceParams = zod.object({
 })
 
 export const GetInvoiceResponse = zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional(),
+  "netto7": zod.number().nullish(),
+  "netto19": zod.number().nullish(),
+  "netto0": zod.number().nullish(),
+  "steuer7": zod.number().nullish(),
+  "steuer19": zod.number().nullish(),
+  "steuer0": zod.number().nullish(),
   "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).describe('Explicit human review state; imports are always unreviewed.'),
   "id": zod.number().int(),
   "rechnungssteller": zod.string().nullish(),
@@ -623,6 +658,18 @@ export const UpdateInvoiceParams = zod.object({
   "id": zod.coerce.number().int()
 })
 
+export const updateInvoiceBodyNetto7Min = -9999999999.99;
+export const updateInvoiceBodyNetto7Max = 9999999999.99;
+export const updateInvoiceBodyNetto7MultipleOf = 0.01;
+
+export const updateInvoiceBodyNetto19Min = -9999999999.99;
+export const updateInvoiceBodyNetto19Max = 9999999999.99;
+export const updateInvoiceBodyNetto19MultipleOf = 0.01;
+
+export const updateInvoiceBodyNetto0Min = -9999999999.99;
+export const updateInvoiceBodyNetto0Max = 9999999999.99;
+export const updateInvoiceBodyNetto0MultipleOf = 0.01;
+
 export const updateInvoiceBodyBruttoBetragMin = -9999999999.99;
 export const updateInvoiceBodyBruttoBetragMax = 9999999999.99;
 
@@ -647,6 +694,10 @@ export const updateInvoiceBodyBuchungskonto2BetragMultipleOf = 0.01;
 
 
 export const UpdateInvoiceBody = zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional().describe('Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.'),
+  "netto7": zod.number().min(updateInvoiceBodyNetto7Min).max(updateInvoiceBodyNetto7Max).multipleOf(updateInvoiceBodyNetto7MultipleOf).nullish(),
+  "netto19": zod.number().min(updateInvoiceBodyNetto19Min).max(updateInvoiceBodyNetto19Max).multipleOf(updateInvoiceBodyNetto19MultipleOf).nullish(),
+  "netto0": zod.number().min(updateInvoiceBodyNetto0Min).max(updateInvoiceBodyNetto0Max).multipleOf(updateInvoiceBodyNetto0MultipleOf).nullish(),
   "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).optional().describe('Explicit human review state; imports are always unreviewed.'),
   "rechnungssteller": zod.string().nullish(),
   "datum": zod.string().nullish(),
@@ -669,6 +720,13 @@ export const UpdateInvoiceBody = zod.object({
 })
 
 export const UpdateInvoiceResponse = zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional(),
+  "netto7": zod.number().nullish(),
+  "netto19": zod.number().nullish(),
+  "netto0": zod.number().nullish(),
+  "steuer7": zod.number().nullish(),
+  "steuer19": zod.number().nullish(),
+  "steuer0": zod.number().nullish(),
   "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).describe('Explicit human review state; imports are always unreviewed.'),
   "id": zod.number().int(),
   "rechnungssteller": zod.string().nullish(),
