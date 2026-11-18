@@ -85,6 +85,7 @@ export function UploadReviewDialog({ open, onOpenChange, previews, onSaved, onRe
             status: "success",
             error: null,
             positionen: previews[index].positionen,
+            pdfFingerprintToken: previews[index].pdfFingerprintToken,
             dateiname: r.dateiname,
             rechnungssteller: r.rechnungssteller || null,
             datum: r.datum || null,
@@ -98,7 +99,10 @@ export function UploadReviewDialog({ open, onOpenChange, previews, onSaved, onRe
           }))
         ),
       });
-      if (!res.ok) throw new Error("Speichern fehlgeschlagen");
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Speichern fehlgeschlagen");
+      }
       return res.json();
     },
     onSuccess: (data: unknown[]) => {

@@ -20,6 +20,14 @@ export interface DropboxExclusionSelection {
   fileId: string;
 }
 
+export type InvoiceDuplicateGroupMatchType = typeof InvoiceDuplicateGroupMatchType[keyof typeof InvoiceDuplicateGroupMatchType];
+
+
+export const InvoiceDuplicateGroupMatchType = {
+  pdf_hash: 'pdf_hash',
+  metadata: 'metadata',
+} as const;
+
 export interface InvoicePosition {
   /** @nullable */
   positionsnummer?: string | null;
@@ -85,6 +93,7 @@ export interface Invoice {
 }
 
 export interface InvoiceDuplicateGroup {
+  matchType: InvoiceDuplicateGroupMatchType;
   key: string;
   invoices: Invoice[];
 }
@@ -296,6 +305,11 @@ export const InvoicePreviewStatus = {
 } as const;
 
 export interface InvoicePreview {
+  /**
+     * Server-signed original PDF fingerprint. Return unchanged on confirmation; expires after 24 hours or a server restart.
+     * @maxLength 200
+     */
+  pdfFingerprintToken?: string;
   /**
      * One-based PDF page numbers whose text could not be read. Successful results may still be incomplete; an empty or omitted list indicates no known unread pages.
      * @items.minimum 1

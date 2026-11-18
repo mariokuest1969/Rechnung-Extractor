@@ -26,3 +26,15 @@ Releasing an import exclusion is not an undo of duplicate deletion: it only allo
 **Why:** The user requires explicit per-file recovery without implying that deleted manual booking metadata can be restored.
 
 **How to apply:** Never clear exclusions implicitly or in bulk as part of settings changes. Explain the loss of manual edits before confirming a selected file's release.
+
+Do not backfill a historical document fingerprint from a mutable Dropbox file without also re-extracting the invoice.
+
+**Why:** A Dropbox file ID can now point to changed bytes; associating today's bytes with yesterday's extracted data would create misleading exact-document matches. Historical local uploads may no longer have original bytes.
+
+**How to apply:** Leave unknown fingerprints empty. Compute them from original import bytes, or update the fingerprint and extracted data together during an explicitly requested re-extraction.
+
+Keep exact-PDF groups separate from metadata groups rather than merging them transitively.
+
+**Why:** If A shares bytes with B and metadata with C, B and C may have nothing in common. Keeping only C must not justify deleting both A and B.
+
+**How to apply:** Prioritize byte-equal groups with a retained copy, then group remaining invoices by complete metadata; explain that further candidates may appear after cleanup.

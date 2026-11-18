@@ -724,8 +724,11 @@ components:
             $ref: "#/components/schemas/InvoiceDuplicateGroup"
     InvoiceDuplicateGroup:
       type: object
-      required: [key, invoices]
+      required: [key, matchType, invoices]
       properties:
+        matchType:
+          type: string
+          enum: [pdf_hash, metadata]
         key:
           type: string
         invoices:
@@ -1067,6 +1070,10 @@ components:
         - status
         - error
       properties:
+        pdfFingerprintToken:
+          type: string
+          maxLength: 200
+          description: Server-signed original PDF fingerprint. Return unchanged on confirmation; expires after 24 hours or a server restart.
         missingPages:
           type: array
           description: One-based PDF page numbers whose text could not be read. Successful results may still be incomplete; an empty or omitted list indicates no known unread pages.

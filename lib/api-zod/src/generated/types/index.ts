@@ -33,6 +33,7 @@ export * from './invoice';
 export * from './invoiceDuplicateDeletion';
 export * from './invoiceDuplicateDeletionResult';
 export * from './invoiceDuplicateGroup';
+export * from './invoiceDuplicateGroupMatchType';
 export * from './invoiceDuplicateReport';
 export * from './invoicePdfSelection';
 export * from './invoicePosition';

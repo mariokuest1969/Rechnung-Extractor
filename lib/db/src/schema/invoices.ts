@@ -34,6 +34,7 @@ export const invoicesTable = pgTable("invoices", {
   buchungskonto2Betrag: numeric("buchungskonto2_betrag", { precision: 12, scale: 2 }),
   buchungstext: text("buchungstext"),
   dateiname: text("dateiname"),
+  pdfSha256: text("pdf_sha256"),
   dropboxFileId: text("dropbox_file_id").unique(),
   positionen: jsonb("positionen").$type<InvoiceLinePosition[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

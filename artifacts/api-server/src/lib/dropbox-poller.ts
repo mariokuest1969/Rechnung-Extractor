@@ -4,6 +4,7 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { eq, isNotNull, inArray, like, sql } from "drizzle-orm";
 import { db, invoicesTable, settingsTable } from "@workspace/db";
+import { hashPdf } from "./pdf-fingerprint";
 import { duplicateExclusionPrefix } from "./invoice-duplicates";
 import { getDropboxFolder, getDropboxToken } from "../routes/settings";
 import { extractInvoiceFromPDF } from "./pdf-extractor";
@@ -183,6 +184,7 @@ async function runDropboxSync(): Promise<SyncResult> {
         bemerkung:        extracted.bemerkung,
         positionen:        extracted.positionen,
         dateiname:        file.name,
+        pdfSha256:        hashPdf(buffer),
         dropboxFileId:    file.id,
         }).onConflictDoNothing({ target: invoicesTable.dropboxFileId }).returning({ id: invoicesTable.id });
         return rows.length > 0;

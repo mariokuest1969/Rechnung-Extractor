@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { hashPdf, signPdfFingerprint, verifyPdfFingerprint } from "../lib/pdf-fingerprint";
 import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -62,7 +63,7 @@ const confirmedInvoice = UpdateInvoiceBody.extend(ExtractPreviewResponseItem.omi
 });
 const confirmedInvoices = confirmedInvoice.array().min(1);
 function toInsertInvoice(item: ReturnType<typeof confirmedInvoice.parse>): typeof invoicesTable.$inferInsert {
-  const { status: _status, error: _error, ...invoice } = item;
+  const { status: _status, error: _error, pdfFingerprintToken: _token, ...invoice } = item;
   return {
     ...invoice,
     bruttoBetrag: item.bruttoBetrag == null ? null : String(item.bruttoBetrag),
@@ -118,12 +119,14 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
     if (!inv) throw new Error("Rechnung nicht gefunden");
     if (!inv.dropboxFileId) throw new Error("Diese Rechnung hat keine Dropbox-Datei");
 
+    let pdfSha256: string | undefined;
     const extracted = await withReextractTimeout(async (signal) => {
       const buffer = await downloadDropboxFile(
         inv.dropboxFileId!,
         undefined,
         signal
       );
+      pdfSha256 = hashPdf(buffer);
       return extractInvoiceFromPDF(
         buffer,
         inv.dateiname ?? inv.dropboxFileId!,
@@ -135,6 +138,7 @@ async function runReextractJob(jobId: string, id: number): Promise<void> {
     const extractedPositionCount = extracted.positionen.length;
     await commitReextractJob(jobId, async (tx) => {
       const [row] = await tx.update(invoicesTable).set({
+        pdfSha256,
         rechnungssteller: extracted.rechnungssteller ?? inv.rechnungssteller,
         datum: extracted.datum ?? inv.datum,
         rechnungsnummer: extracted.rechnungsnummer ?? inv.rechnungsnummer,
@@ -211,7 +215,7 @@ router.post("/invoices/upload", receivePdfs, async (req, res): Promise<void> => 
   for (const file of files) {
     try {
       const extracted = await extractInvoiceFromPDF(file.buffer, file.originalname);
-      values.push(toInsertInvoice(confirmedInvoice.parse({ ...extracted, dateiname: file.originalname })));
+      values.push({ ...toInsertInvoice(confirmedInvoice.parse({ ...extracted, dateiname: file.originalname })), pdfSha256: hashPdf(file.buffer) });
     } catch (err) {
       req.log.error({ err, filename: file.originalname }, "Failed to process PDF");
       res.status(422).json({ error: "PDF konnte nicht verarbeitet werden; keine Rechnungen gespeichert", dateiname: file.originalname });
@@ -237,7 +241,8 @@ router.post("/invoices/extract-preview", receivePdfs, async (req, res): Promise<
       try {
         const extracted = await deadline.run(signal =>
           extractInvoiceFromPDF(file.buffer, file.originalname, undefined, signal, { strict: true }));
-        previews.push({ ...extracted, dateiname: file.originalname, status: "success", error: null });
+        previews.push({ ...extracted, dateiname: file.originalname, status: "success", error: null,
+          pdfFingerprintToken: signPdfFingerprint(file.buffer) });
       } catch (err) {
         req.log.error({ err, filename: file.originalname }, "Preview extraction failed");
         previews.push({ dateiname: file.originalname, status: "error", error: deadline.signal.aborted
@@ -256,7 +261,16 @@ router.post("/invoices/extract-preview", receivePdfs, async (req, res): Promise<
 router.post("/invoices/upload-confirmed", async (req, res): Promise<void> => {
   const body = confirmedInvoices.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
-  const created = await db.insert(invoicesTable).values(body.data.map(toInsertInvoice)).returning();
+  const values = [];
+  for (const item of body.data) {
+    const pdfSha256 = item.pdfFingerprintToken ? verifyPdfFingerprint(item.pdfFingerprintToken) : null;
+    if (item.pdfFingerprintToken != null && !pdfSha256) {
+      res.status(400).json({ error: "Dateinachweis ungültig oder abgelaufen. Bitte die PDF erneut auslesen; es wurde nichts gespeichert." });
+      return;
+    }
+    values.push({ ...toInsertInvoice(item), pdfSha256 });
+  }
+  const created = await db.insert(invoicesTable).values(values).returning();
   res.json(created.map(toApiInvoice));
 });
 
@@ -396,7 +410,7 @@ router.get("/invoices/reextract-jobs/:jobId", async (req, res): Promise<void> =>
 // POST /invoices/bulk-delete
 router.get("/invoice-duplicates", async (_req, res) => {
   const report = findInvoiceDuplicates(await db.select().from(invoicesTable));
-  res.json({ ...report, groups: report.groups.map(group => ({ key: group.key, invoices: group.invoices.map(toApiInvoice) })) });
+  res.json({ ...report, groups: report.groups.map(group => ({ key: group.key, matchType: group.matchType, invoices: group.invoices.map(toApiInvoice) })) });
 });
 
 router.post("/invoice-duplicates/delete", async (req, res) => {

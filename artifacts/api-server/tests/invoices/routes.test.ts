@@ -103,6 +103,33 @@ async function upload(files: { content: string; type?: string }[], path = "/uplo
   return { status: response.status, body: await response.json() };
 }
 
+test("original PDF hashes survive direct and reviewed uploads without trusting client hashes", async () => {
+  const content = "%PDF-original-fingerprint";
+  const direct = await upload([{ content }]);
+  assert.equal(direct.status, 200);
+  const preview = await upload([{ content }], "/extract-preview");
+  assert.equal(preview.status, 200);
+  const item = preview.body[0];
+  assert.ok(item.pdfFingerprintToken);
+  const reviewed = await request("/upload-confirmed", "POST", [{ ...item, rechnungssteller: null, bruttoBetrag: null }]);
+  assert.equal(reviewed.status, 200);
+  const ids = [direct.body[0].id, reviewed.body[0].id];
+  const hashes = await client.query("SELECT pdf_sha256 FROM invoices WHERE id = ANY($1)", [ids]);
+  assert.match(hashes.rows[0].pdf_sha256, /^[a-f0-9]{64}$/);
+  assert.equal(hashes.rows[0].pdf_sha256, hashes.rows[1].pdf_sha256);
+  const report = await duplicateRequest();
+  assert.ok(report.body.groups.some((g: any) => g.matchType === "pdf_hash" && g.invoices.some((i: any) => i.id === ids[1])));
+  assert.equal((await duplicateRequest("/delete", ids)).status, 409);
+  const count = (await request()).body.length;
+  assert.equal((await request("/upload-confirmed", "POST", [item, { ...item, pdfFingerprintToken: "forged" }])).status, 400);
+  assert.equal((await request()).body.length, count);
+  const legacy = await request("/upload-confirmed", "POST", [{ dateiname: "legacy.pdf", pdfSha256: hashes.rows[0].pdf_sha256 }]);
+  assert.equal(legacy.status, 200);
+  assert.equal((await client.query("SELECT pdf_sha256 FROM invoices WHERE id=$1", [legacy.body[0].id])).rows[0].pdf_sha256, null);
+  assert.equal((await duplicateRequest("/delete", [ids[1]])).status, 200);
+  await client.query("DELETE FROM invoices");
+});
+
 test("invoice routes preserve existing data and atomically save validated uploads", async () => {
   assert.deepEqual((await request()).body, []);
   assert.equal((await request("/stats")).body.totalInvoices, 0);

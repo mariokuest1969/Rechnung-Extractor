@@ -10,6 +10,11 @@ import type { InvoicePreviewStatus } from './invoicePreviewStatus';
 
 export interface InvoicePreview {
   /**
+     * Server-signed original PDF fingerprint. Return unchanged on confirmation; expires after 24 hours or a server restart.
+     * @maxLength 200
+     */
+  pdfFingerprintToken?: string;
+  /**
      * One-based PDF page numbers whose text could not be read. Successful results may still be incomplete; an empty or omitted list indicates no known unread pages.
      * @items.minimum 1
      */

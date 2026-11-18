@@ -14,6 +14,7 @@ import * as zod from 'zod';
 export const ListInvoiceDuplicatesResponse = zod.object({
   "excludedCount": zod.number().int(),
   "groups": zod.array(zod.object({
+  "matchType": zod.enum(['pdf_hash', 'metadata']),
   "key": zod.string(),
   "invoices": zod.array(zod.object({
   "id": zod.number().int(),
@@ -389,10 +390,13 @@ export const ExtractPreviewBody = zod.object({
   "files": zod.array(zod.instanceof(Blob)).min(1)
 })
 
+export const extractPreviewResponsePdfFingerprintTokenMax = 200;
+
 
 
 
 export const ExtractPreviewResponseItem = zod.object({
+  "pdfFingerprintToken": zod.string().max(extractPreviewResponsePdfFingerprintTokenMax).optional().describe('Server-signed original PDF fingerprint. Return unchanged on confirmation; expires after 24 hours or a server restart.'),
   "missingPages": zod.array(zod.number().int().min(1)).optional().describe('One-based PDF page numbers whose text could not be read. Successful results may still be incomplete; an empty or omitted list indicates no known unread pages.'),
   "status": zod.enum(['success', 'error']),
   "error": zod.string().nullable().describe('Safe user-facing error for failed extractions; null on success. Failed results contain no extracted invoice fields.'),

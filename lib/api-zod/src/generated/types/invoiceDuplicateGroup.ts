@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Invoice } from './invoice';
+import type { InvoiceDuplicateGroupMatchType } from './invoiceDuplicateGroupMatchType';
 
 export interface InvoiceDuplicateGroup {
+  matchType: InvoiceDuplicateGroupMatchType;
   key: string;
   invoices: Invoice[];
 }

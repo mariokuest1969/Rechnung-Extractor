@@ -132,6 +132,11 @@ function GroupBlock({
           {group.invoices.length} Einträge · {selectedInGroup} markiert · {kept} bleib{kept === 1 ? "t" : "en"}
         </p>
       </header>
+      <p className="mb-3 text-xs text-muted-foreground">
+        {group.matchType === "pdf_hash"
+          ? "Identische PDF-Dateien (SHA-256). Buchungsdaten und Notizen können trotzdem abweichen."
+          : "Gleiche Rechnungsdaten – bitte die Dokumente vergleichen."}
+      </p>
       <ul className="space-y-2">
         {group.invoices.map((inv) => {
           const checked = selected.has(inv.id);
@@ -257,8 +262,10 @@ export function DuplicateReviewDialog({
           <DialogTitle>Mögliche Duplikate prüfen</DialogTitle>
           <DialogDescription>
             Geprüft werden alle Rechnungen, unabhängig von Filtern und Markierungen in der Tabelle.
-            Eine Gruppe entsteht nur bei identischem Rechnungssteller, Rechnungsnummer, Rechnungsdatum,
-            Bruttobetrag und Währung. Das ist ein Hinweis, kein Beweis – bitte jede Kopie vergleichen.
+            Identische PDF-Dateien werden auch bei fehlenden Rechnungsdaten erkannt.
+            Zusätzlich vergleichen wir Rechnungssteller, Rechnungsnummer, Datum, Bruttobetrag und Währung.
+            PDF-Treffer haben Vorrang; weitere Datentreffer können nach einer Bereinigung erscheinen.
+            Bitte Buchungsdaten jeder Kopie prüfen. Es wird nichts automatisch gelöscht.
           </DialogDescription>
         </DialogHeader>
 
@@ -273,7 +280,8 @@ export function DuplicateReviewDialog({
           <p className="flex items-start gap-1.5 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300" data-testid="text-duplicate-excluded">
             <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             {data.excludedCount} Rechnung{data.excludedCount !== 1 ? "en wurden" : " wurde"} nicht geprüft, weil
-            mindestens eines der Vergleichsmerkmale (Rechnungssteller, Nummer, Datum, Bruttobetrag, Währung) fehlt.
+            kein PDF-Fingerabdruck vorliegt und mindestens eines der Vergleichsmerkmale
+            (Rechnungssteller, Nummer, Datum, Bruttobetrag, Währung) fehlt.
             Diese können trotzdem Duplikate sein.
           </p>
         )}
