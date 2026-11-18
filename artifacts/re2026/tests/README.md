@@ -19,6 +19,12 @@ semicolon/quote/newline escaping, formula-like text, negative/zero amounts,
 missing values, numeric Excel cells, empty/invalid scopes, and visible export
 failures with retry.
 
+`article-missing-data.integration.test.tsx` also checks the visible distinction
+between partial totals, wholly missing values and real zeros in both views.
+It exercises missing-position warnings across selected/date scopes, article
+and supplier filters, and empty/invalid scopes without duplicating calculation
+unit tests.
+
 This is a component/file integration test, not a browser end-to-end test:
 authentication, operating-system save dialogs and browser-specific download
 policies are not exercised. It requires neither a running API nor invoice data
