@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import { getAuth } from "@clerk/express";
 import healthRouter from "./health";
 import invoicesRouter from "./invoices";
+import bookingsRouter from "./bookings";
 import settingsRouter from "./settings";
 import dropboxOAuthRouter from "./dropbox-oauth";
 import lieferantenRouter from "./lieferanten";
@@ -21,6 +22,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(requireAuth);
 router.use(invoicesRouter);
+router.use(bookingsRouter);
 router.use(settingsRouter);
 router.use(dropboxOAuthRouter);
 router.use(lieferantenRouter);

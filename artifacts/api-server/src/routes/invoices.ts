@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { TaxSplitError } from "@workspace/invoice-tax";
 import { taxUpdate } from "../lib/invoice-tax-update";
+import { toApiInvoice } from "../lib/invoice-api";
 import { hashPdf, signPdfFingerprint, verifyPdfFingerprint } from "../lib/pdf-fingerprint";
 import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
@@ -95,41 +96,6 @@ function toInsertInvoice(item: ReturnType<typeof confirmedInvoice.parse>): typeo
   };
 }
 
-function toApiInvoice(row: typeof invoicesTable.$inferSelect) {
-  return {
-    id: row.id,
-    bearbeitungsstatus: row.bearbeitungsstatus ?? "unreviewed",
-    rechnungssteller: row.rechnungssteller ?? null,
-    datum: row.datum ?? null,
-    rechnungsnummer: row.rechnungsnummer ?? null,
-    bruttoBetrag: row.bruttoBetrag != null ? parseFloat(row.bruttoBetrag) : null,
-    steuersatz: row.steuersatz != null ? parseFloat(row.steuersatz) : null,
-    steuerBetrag: row.steuerBetrag != null ? parseFloat(row.steuerBetrag) : null,
-    nettoBetrag: row.nettoBetrag != null ? parseFloat(row.nettoBetrag) : null,
-    steuerModus: row.steuerModus ?? "single",
-    netto7: row.netto7 == null ? null : Number(row.netto7),
-    netto19: row.netto19 == null ? null : Number(row.netto19),
-    netto0: row.netto0 == null ? null : Number(row.netto0),
-    steuer7: row.steuer7 == null ? null : Number(row.steuer7),
-    steuer19: row.steuer19 == null ? null : Number(row.steuer19),
-    steuer0: row.steuer0 == null ? null : Number(row.steuer0),
-    waehrung: row.waehrung ?? null,
-    bemerkung: row.bemerkung ?? null,
-    freifeld1: row.freifeld1 ?? null,
-    freifeld2: row.freifeld2 ?? null,
-    freifeld3: row.freifeld3 ?? null,
-    lieferantId: row.lieferantId ?? null,
-    buchungskonto1: row.buchungskonto1 ?? null,
-    buchungskonto1Betrag: row.buchungskonto1Betrag != null ? parseFloat(row.buchungskonto1Betrag) : null,
-    buchungskonto2: row.buchungskonto2 ?? null,
-    buchungskonto2Betrag: row.buchungskonto2Betrag != null ? parseFloat(row.buchungskonto2Betrag) : null,
-    buchungstext: row.buchungstext ?? null,
-    dateiname: row.dateiname ?? null,
-    dropboxFileId: row.dropboxFileId ?? null,
-    positionen: row.positionen ?? [],
-    createdAt: row.createdAt.toISOString(),
-  };
-}
 async function runReextractJob(jobId: string, id: number): Promise<void> {
   try {
     const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));

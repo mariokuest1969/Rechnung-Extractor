@@ -20,3 +20,15 @@ Beleglose Buchungen may recur monthly, quarterly or annually, but due bookings m
 **Why:** The user explicitly chose „Fällige Buchungen erst bestätigen“ rather than automatic creation.
 
 **How to apply:** Show due proposals and create real bookings only after explicit confirmation.
+
+For recurring schedules, keep the original day as the anchor when short months
+clamp a date. Pausing preserves the whole unconfirmed backlog; ending permanently
+withdraws remaining proposals. After the first confirmation, changing the rhythm
+requires a new template, not reinterpretation of historical occurrences.
+
+**Why:** Otherwise a schedule edit could redefine already confirmed periods and
+make the promise “at most one booking per due date” ambiguous. Pausing must not
+silently discard overdue work.
+
+**How to apply:** Preserve confirmation tombstones even when their booking is
+deleted. Treat confirmation as permission to create, never as marking work done.

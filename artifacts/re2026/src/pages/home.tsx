@@ -2,6 +2,7 @@ import { useClerk, useUser } from "@clerk/react";
 import { StatsBar } from "@/components/StatsBar";
 import { UploadZone } from "@/components/UploadZone";
 import { InvoiceTable } from "@/components/InvoiceTable";
+import { ManualBookingsBar } from "@/components/ManualBookingsBar";
 import { NoticeBanner } from "@/components/NoticeBanner";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
@@ -57,6 +58,7 @@ export default function Home() {
       <main className="flex-1 p-6 max-w-[1600px] w-full mx-auto space-y-6">
         <StatsBar />
         <UploadZone />
+        <ManualBookingsBar />
         <InvoiceTable />
       </main>
     </div>

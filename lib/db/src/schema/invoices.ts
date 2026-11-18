@@ -16,6 +16,9 @@ export interface InvoiceLinePosition {
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
+  herkunft: text("herkunft", { enum: ["pdf", "manual", "recurring"] }).notNull().default("pdf"),
+  wiederholungVorlageId: integer("wiederholung_vorlage_id"),
+  faelligkeitsdatum: text("faelligkeitsdatum"),
   bearbeitungsstatus: text("bearbeitungsstatus", { enum: ["unreviewed", "to_review", "done"] }).notNull().default("unreviewed"),
   rechnungssteller: text("rechnungssteller"),
   datum: text("datum"),
@@ -48,6 +51,7 @@ export const invoicesTable = pgTable("invoices", {
   positionen: jsonb("positionen").$type<InvoiceLinePosition[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
+  check("invoices_origin_check", sql`${table.herkunft} IN ('pdf', 'manual', 'recurring')`),
   check("invoices_review_status_check", sql`${table.bearbeitungsstatus} IN ('unreviewed', 'to_review', 'done')`),
   check("invoices_tax_mode_check", sql`${table.steuerModus} IN ('single', 'split')`),
 ]);

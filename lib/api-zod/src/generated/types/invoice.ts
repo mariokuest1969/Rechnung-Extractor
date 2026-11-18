@@ -5,11 +5,17 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoiceHerkunft } from './invoiceHerkunft';
 import type { InvoicePosition } from './invoicePosition';
 import type { InvoiceReviewStatus } from './invoiceReviewStatus';
 import type { InvoiceSteuerModus } from './invoiceSteuerModus';
 
 export interface Invoice {
+  herkunft?: InvoiceHerkunft;
+  /** @nullable */
+  wiederholungVorlageId?: number | null;
+  /** @nullable */
+  faelligkeitsdatum?: string | null;
   steuerModus?: InvoiceSteuerModus;
   /** @nullable */
   netto7?: number | null;

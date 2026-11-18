@@ -26,7 +26,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { InvoiceStatusSelect } from "./InvoiceStatusSelect";
 import { InvoiceTaxEditor } from "./InvoiceTaxEditor";
-import { formatNumber } from "@/lib/format";
+import { OriginBadge } from "./ManualBookingsBar";
+import { formatGermanDate, splitGross } from "@/lib/manual-booking";
 import { FileText, Loader2, Crosshair, ChevronLeft, ChevronRight, X, Calculator } from "lucide-react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -51,13 +52,9 @@ const CAPTURE_FIELDS: { key: keyof Invoice; label: string }[] = [
 const MWST_RATES = [0, 7, 19];
 
 // ─── Auto-calc helper ─────────────────────────────────────────────────────────
+// Same bigint commercial rounding as the backend (credits included).
 function calcFromBruttoAndRate(brutto: number, rate: number) {
-  const netto = brutto / (1 + rate / 100);
-  const steuer = brutto - netto;
-  return {
-    nettoBetrag: Math.round(netto * 100) / 100,
-    steuerBetrag: Math.round(steuer * 100) / 100,
-  };
+  return splitGross(brutto, rate);
 }
 
 // ─── Generic editable field ───────────────────────────────────────────────────
@@ -74,7 +71,9 @@ function DetailField({
   suggestions,
   className = "",
   readOnly = false,
+  noCapture = false,
 }: {
+  noCapture?: boolean;
   label: string;
   fieldKey: keyof Invoice;
   value: string | number | null | undefined;
@@ -98,7 +97,7 @@ function DetailField({
     <div className={`flex flex-col gap-0.5 ${className}`}>
       <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
         {label}
-        {!readOnly && (
+        {!readOnly && !noCapture && (
           <button
             type="button"
             title={isCapturing ? "Warten auf Markierung…" : "Text aus PDF übernehmen"}
@@ -146,7 +145,9 @@ function MwStField({
   captureField,
   onStartCapture,
   hasAutoCalc,
+  noCapture = false,
 }: {
+  noCapture?: boolean;
   error?: string;
   value: string | number | null | undefined;
   onSave: (v: string | null) => void;
@@ -173,7 +174,7 @@ function MwStField({
             <Calculator className="h-2.5 w-2.5" />
           </span>
         )}
-        <button
+        {!noCapture && <button
           type="button"
           title={isCapturing ? "Warten auf Markierung…" : "Text aus PDF übernehmen"}
           onClick={() => onStartCapture("steuersatz")}
@@ -184,7 +185,7 @@ function MwStField({
           }`}
         >
           <Crosshair className="h-3 w-3" />
-        </button>
+        </button>}
       </div>
 
       <div className="flex gap-1.5">
@@ -376,7 +377,10 @@ export function InvoiceDetailDialog({
       if (result.error) { toast.error(result.error); return false; }
       parsedValue = result.value;
     } else if (["bruttoBetrag", "steuerBetrag", "nettoBetrag"].includes(field as string)) {
-      parsedValue = rawValue ? (parseFloat(rawValue.replace(",", ".")) || null) : null;
+      // Explicit 0 is kept; malformed or over-precise input is rejected, never rounded.
+      const result = validateSingleNumber("buchungskonto1Betrag", rawValue);
+      if (result.error) { toast.error(result.error); return false; }
+      parsedValue = result.value;
     } else if (field === "lieferantId") {
       parsedValue = rawValue ? parseInt(rawValue, 10) : null;
     }
@@ -394,7 +398,7 @@ export function InvoiceDetailDialog({
           ? (parsedValue as number | null)
           : (invoice.steuersatz != null ? parseFloat(String(invoice.steuersatz)) : null);
 
-      if (brutto != null && rate != null && !isNaN(brutto) && !isNaN(rate)) {
+      if (brutto != null && rate != null && !isNaN(brutto) && !isNaN(rate) && Number.isInteger(Math.round(rate * 100)) && Math.abs(rate * 100 - Math.round(rate * 100)) < 1e-9) {
         const { nettoBetrag, steuerBetrag } = calcFromBruttoAndRate(brutto, rate);
         updates.nettoBetrag = nettoBetrag;
         updates.steuerBetrag = steuerBetrag;
@@ -427,11 +431,13 @@ export function InvoiceDetailDialog({
   const fieldProps = (key: keyof Invoice) => ({
     fieldKey: key,
     captureField,
+    noCapture: (invoice.herkunft ?? "pdf") !== "pdf",
     onStartCapture: (k: keyof Invoice) => setCaptureField((prev) => (prev === k ? null : k)),
     onSave: (v: string | null) => handleUpdate(key, v),
   });
 
-  const title = invoice.rechnungssteller || invoice.dateiname || `Rechnung #${invoice.id}`;
+  const isPdf = (invoice.herkunft ?? "pdf") === "pdf";
+  const title = invoice.buchungstext && !isPdf ? invoice.buchungstext : invoice.rechnungssteller || invoice.dateiname || `Rechnung #${invoice.id}`;
 
   // Whether brutto+mwst are both present → auto-calc is active
    const hasAutoCalc = invoice.steuerModus !== "split" && invoice.bruttoBetrag != null && invoice.steuersatz != null;
@@ -452,7 +458,16 @@ export function InvoiceDetailDialog({
               {invoice.dateiname ?? "PDF Vorschau"}
             </span>
           </div>
-          {invoice.dropboxFileId ? (
+          {!isPdf ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-6">
+              <div className="text-center max-w-xs space-y-2" data-testid="panel-no-receipt">
+                <div className="flex justify-center"><OriginBadge herkunft={invoice.herkunft} vorlageId={invoice.wiederholungVorlageId} /></div>
+                <p className="font-medium text-foreground">{invoice.herkunft === "recurring" ? "Wiederkehrende Buchung ohne Beleg" : "Buchung ohne Beleg"}</p>
+                <p className="text-xs">Manuell erfasst, keine PDF vorhanden.{invoice.herkunft === "recurring" && invoice.wiederholungVorlageId ? ` Aus Vorlage #${invoice.wiederholungVorlageId}.` : ""}</p>
+                {invoice.faelligkeitsdatum && <p className="text-xs">Fälligkeitstermin: <span className="font-mono">{formatGermanDate(invoice.faelligkeitsdatum)}</span></p>}
+              </div>
+            </div>
+          ) : invoice.dropboxFileId ? (
             <PdfViewer invoiceId={invoice.id} captureField={captureField} onCapture={handleCapture} />
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
@@ -470,7 +485,7 @@ export function InvoiceDetailDialog({
           <div className="px-4 py-2.5 border-b border-border bg-muted/20 shrink-0 flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-semibold truncate">{title}</p>
-              <p className="text-xs text-muted-foreground">Rechnung #{invoice.id}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">{isPdf ? "Rechnung" : "Buchung"} #{invoice.id} <OriginBadge herkunft={invoice.herkunft} vorlageId={invoice.wiederholungVorlageId} /></p>
             </div>
             <button
               onClick={() => onOpenChange(false)}
@@ -488,7 +503,7 @@ export function InvoiceDetailDialog({
                 disabled={updateMutation.isPending}
                 onChange={value => { if (value) void handleUpdate("bearbeitungsstatus", value); }} />
             </div>
-            <DetailField label="Dateiname" value={invoice.dateiname} readOnly {...fieldProps("dateiname")} />
+            {isPdf && <DetailField label="Dateiname" value={invoice.dateiname} readOnly {...fieldProps("dateiname")} />}
             {/* Rechnungssteller */}
               <DetailField label="Rechnungssteller" value={invoice.rechnungssteller} {...fieldProps("rechnungssteller")} />
 
@@ -526,7 +541,7 @@ export function InvoiceDetailDialog({
                   <div className="grid gap-3 grid-cols-2">
                       <DetailField
                         label="Brutto"
-                        value={invoice.bruttoBetrag != null ? formatNumber(invoice.bruttoBetrag) : null}
+                        value={invoice.bruttoBetrag != null ? invoice.bruttoBetrag.toFixed(2).replace(".", ",") : null}
                         {...fieldProps("bruttoBetrag")}
                       />
                       <MwStField
@@ -536,6 +551,7 @@ export function InvoiceDetailDialog({
                         captureField={captureField}
                         onStartCapture={(k) => setCaptureField((prev) => (prev === k ? null : k))}
                         hasAutoCalc={hasAutoCalc}
+                        noCapture={!isPdf}
                       />
                   </div>
 
@@ -543,13 +559,13 @@ export function InvoiceDetailDialog({
                   <div className="grid gap-3 grid-cols-2">
                       <DetailField
                         label={hasAutoCalc ? "Steuer (auto)" : "Steuer"}
-                        value={invoice.steuerBetrag != null ? formatNumber(invoice.steuerBetrag) : null}
+                        value={invoice.steuerBetrag != null ? invoice.steuerBetrag.toFixed(2).replace(".", ",") : null}
                         readOnly={hasAutoCalc}
                         {...fieldProps("steuerBetrag")}
                       />
                       <DetailField
                         label={hasAutoCalc ? "Netto (auto)" : "Netto"}
-                        value={invoice.nettoBetrag != null ? formatNumber(invoice.nettoBetrag) : null}
+                        value={invoice.nettoBetrag != null ? invoice.nettoBetrag.toFixed(2).replace(".", ",") : null}
                         readOnly={hasAutoCalc}
                         {...fieldProps("nettoBetrag")}
                       />

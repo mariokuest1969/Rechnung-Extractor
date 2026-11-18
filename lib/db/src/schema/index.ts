@@ -3,3 +3,4 @@ export * from "./settings";
 export * from "./lieferanten";
 export * from "./buchungskonten";
 export * from "./reextract-jobs";
+export * from "./booking-templates";

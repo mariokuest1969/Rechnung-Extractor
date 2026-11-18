@@ -1,3 +1,4 @@
+import { HERKUNFT_EXPORT, STATUS_EXPORT } from "./invoice-origin-export";
 import writeExcelFile, { type SheetData } from "write-excel-file/browser";
 import type { Invoice } from "@workspace/api-client-react";
 import { TAX_EXPORT_HEADERS, invoiceTaxExportValues } from "./invoice-tax-export";
@@ -53,6 +54,12 @@ export function createInvoiceExcelSheet(invoices: Invoice[]) {
     "Feld 1":          inv.freifeld1 ?? "",
     "Feld 2":          inv.freifeld2 ?? "",
     "Feld 3":          inv.freifeld3 ?? "",
+    Herkunft:          HERKUNFT_EXPORT[inv.herkunft ?? "pdf"],
+    Bearbeitungsstatus: STATUS_EXPORT[inv.bearbeitungsstatus ?? "unreviewed"],
+    "Buchungskonto 1": inv.buchungskonto1 ?? "",
+    "Betrag Konto 1":  inv.buchungskonto1Betrag ?? "",
+    "Buchungskonto 2": inv.buchungskonto2 ?? "",
+    "Betrag Konto 2":  inv.buchungskonto2Betrag ?? "",
     ...Object.fromEntries(TAX_EXPORT_HEADERS.map((header, index) => [header, invoiceTaxExportValues(inv)[index]])),
   }));
 
@@ -61,6 +68,7 @@ export function createInvoiceExcelSheet(invoices: Invoice[]) {
     "Dateiname", "Rechnungssteller", "Datum", "Rechnungsnummer", "Brutto (€)",
     "MwSt %", "Steuer (€)", "Netto (€)", "Währung", "Buchungstext",
     "Bemerkung", "Feld 1", "Feld 2", "Feld 3",
+    "Herkunft", "Bearbeitungsstatus", "Buchungskonto 1", "Betrag Konto 1", "Buchungskonto 2", "Betrag Konto 2",
     ...TAX_EXPORT_HEADERS,
   ];
   return {
@@ -68,7 +76,7 @@ export function createInvoiceExcelSheet(invoices: Invoice[]) {
     options: {
       sheet: "Rechnungen",
       stickyRowsCount: 1,
-      columns: [36, 28, 12, 20, 14, 8, 14, 14, 8, 24, 24, 16, 16, 16, 30, 16, 16, 16, 16, 16, 16]
+      columns: [36, 28, 12, 20, 14, 8, 14, 14, 8, 24, 24, 16, 16, 16, 14, 30, 16, 14, 16, 14, 30, 16, 16, 16, 16, 16, 16]
         .map((width) => ({ width })),
     },
   };

@@ -4,6 +4,7 @@ import { startDropboxPoller } from "./lib/dropbox-poller";
 import { maintainReextractJobs } from "./lib/reextract-jobs";
 import { assertReextractSchema } from "./lib/reextract-schema";
 import { assertInvoiceSchema } from "./lib/invoice-schema";
+import { assertBookingSchema } from "./lib/booking-schema";
 import { pool } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
@@ -22,6 +23,7 @@ if (Number.isNaN(port) || port <= 0) {
 
 async function start() {
   await assertInvoiceSchema();
+  await assertBookingSchema();
   await assertReextractSchema();
   app.listen(port, (err) => {
   if (err) {

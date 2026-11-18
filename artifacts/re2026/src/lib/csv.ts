@@ -1,3 +1,4 @@
+import { HERKUNFT_EXPORT, STATUS_EXPORT } from "./invoice-origin-export";
 import type { Invoice } from "@workspace/api-client-react";
 import { TAX_EXPORT_HEADERS, invoiceTaxExportValues } from "./invoice-tax-export";
 import { POSITION_EXPORT_HEADERS, createPositionExportRows } from "./position-export";
@@ -39,6 +40,13 @@ export function createInvoiceCSVTable(invoices: Invoice[]) {
     "Netto",
     "Währung",
     "Bemerkung",
+    "Herkunft",
+    "Bearbeitungsstatus",
+    "Buchungstext",
+    "Buchungskonto 1",
+    "Betrag Konto 1",
+    "Buchungskonto 2",
+    "Betrag Konto 2",
     ...TAX_EXPORT_HEADERS,
   ];
 
@@ -53,6 +61,13 @@ export function createInvoiceCSVTable(invoices: Invoice[]) {
     inv.nettoBetrag ?? "",
     inv.waehrung || "EUR",
     inv.bemerkung || "",
+    HERKUNFT_EXPORT[inv.herkunft ?? "pdf"],
+    STATUS_EXPORT[inv.bearbeitungsstatus ?? "unreviewed"],
+    inv.buchungstext || "",
+    inv.buchungskonto1 || "",
+    inv.buchungskonto1Betrag ?? "",
+    inv.buchungskonto2 || "",
+    inv.buchungskonto2Betrag ?? "",
     ...invoiceTaxExportValues(inv),
   ].map(articleCsvCell));
   return { headers, rows };

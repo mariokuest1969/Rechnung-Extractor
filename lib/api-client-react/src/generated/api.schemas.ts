@@ -5,6 +5,165 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.
+ */
+export type InvoiceUpdateSteuerModus = typeof InvoiceUpdateSteuerModus[keyof typeof InvoiceUpdateSteuerModus];
+
+
+export const InvoiceUpdateSteuerModus = {
+  single: 'single',
+  split: 'split',
+} as const;
+
+/**
+ * @minimum -9999999999.99
+ * @maximum 9999999999.99
+ * @nullable
+ */
+export type InvoiceSplitAmount = number | null;
+
+/**
+ * Explicit human review state; imports are always unreviewed.
+ */
+export type InvoiceReviewStatus = typeof InvoiceReviewStatus[keyof typeof InvoiceReviewStatus];
+
+
+export const InvoiceReviewStatus = {
+  unreviewed: 'unreviewed',
+  to_review: 'to_review',
+  done: 'done',
+} as const;
+
+export interface InvoiceUpdate {
+  /** Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals. */
+  steuerModus?: InvoiceUpdateSteuerModus;
+  netto7?: InvoiceSplitAmount | null;
+  netto19?: InvoiceSplitAmount | null;
+  netto0?: InvoiceSplitAmount | null;
+  bearbeitungsstatus?: InvoiceReviewStatus;
+  /** @nullable */
+  rechnungssteller?: string | null;
+  /** @nullable */
+  datum?: string | null;
+  /** @nullable */
+  rechnungsnummer?: string | null;
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
+  bruttoBetrag?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  steuersatz?: number | null;
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
+  steuerBetrag?: number | null;
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
+  nettoBetrag?: number | null;
+  /** @nullable */
+  waehrung?: string | null;
+  /** @nullable */
+  bemerkung?: string | null;
+  /** @nullable */
+  freifeld1?: string | null;
+  /** @nullable */
+  freifeld2?: string | null;
+  /** @nullable */
+  freifeld3?: string | null;
+  /** @nullable */
+  lieferantId?: number | null;
+  /** @nullable */
+  buchungskonto1?: string | null;
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
+  buchungskonto1Betrag?: number | null;
+  /** @nullable */
+  buchungskonto2?: string | null;
+  /**
+     * @minimum -9999999999.99
+     * @maximum 9999999999.99
+     * @nullable
+     */
+  buchungskonto2Betrag?: number | null;
+  /** @nullable */
+  buchungstext?: string | null;
+}
+
+export type ManualBookingInput = InvoiceUpdate & {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  datum: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  buchungstext: string;
+  /** @pattern ^[A-Z]{3}$ */
+  waehrung: string;
+};
+
+export type BookingTemplateInputIntervalMonths = typeof BookingTemplateInputIntervalMonths[keyof typeof BookingTemplateInputIntervalMonths];
+
+
+export const BookingTemplateInputIntervalMonths = {
+  NUMBER_1: 1,
+  NUMBER_3: 3,
+  NUMBER_12: 12,
+} as const;
+
+export type BookingTemplateInputStatus = typeof BookingTemplateInputStatus[keyof typeof BookingTemplateInputStatus];
+
+
+export const BookingTemplateInputStatus = {
+  active: 'active',
+  paused: 'paused',
+  ended: 'ended',
+} as const;
+
+export interface BookingTemplateInput {
+  booking: ManualBookingInput;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  startDate: string;
+  intervalMonths: BookingTemplateInputIntervalMonths;
+  status: BookingTemplateInputStatus;
+}
+
+export type BookingTemplate = BookingTemplateInput & {
+  id: number;
+  scheduleLocked: boolean;
+};
+
+export interface BookingOccurrenceInput {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  dueDate: string;
+}
+
+export interface DueBooking {
+  templateId: number;
+  dueDate: string;
+  booking: ManualBookingInput;
+}
+
+export interface BookingConfirmation {
+  /** @nullable */
+  invoiceId: number | null;
+  alreadyConfirmed: boolean;
+}
+
 export interface DropboxExclusion {
   fileId: string;
   /** @nullable */
@@ -28,24 +187,21 @@ export const InvoiceDuplicateGroupMatchType = {
   metadata: 'metadata',
 } as const;
 
+export type InvoiceHerkunft = typeof InvoiceHerkunft[keyof typeof InvoiceHerkunft];
+
+
+export const InvoiceHerkunft = {
+  pdf: 'pdf',
+  manual: 'manual',
+  recurring: 'recurring',
+} as const;
+
 export type InvoiceSteuerModus = typeof InvoiceSteuerModus[keyof typeof InvoiceSteuerModus];
 
 
 export const InvoiceSteuerModus = {
   single: 'single',
   split: 'split',
-} as const;
-
-/**
- * Explicit human review state; imports are always unreviewed.
- */
-export type InvoiceReviewStatus = typeof InvoiceReviewStatus[keyof typeof InvoiceReviewStatus];
-
-
-export const InvoiceReviewStatus = {
-  unreviewed: 'unreviewed',
-  to_review: 'to_review',
-  done: 'done',
 } as const;
 
 export interface InvoicePosition {
@@ -67,6 +223,11 @@ export interface InvoicePosition {
 }
 
 export interface Invoice {
+  herkunft?: InvoiceHerkunft;
+  /** @nullable */
+  wiederholungVorlageId?: number | null;
+  /** @nullable */
+  faelligkeitsdatum?: string | null;
   steuerModus?: InvoiceSteuerModus;
   /** @nullable */
   netto7?: number | null;
@@ -256,93 +417,6 @@ export interface Buchungskonto {
 export interface BuchungskontoCreate {
   kontonummer: string;
   bezeichnung: string;
-}
-
-/**
- * @minimum -9999999999.99
- * @maximum 9999999999.99
- * @nullable
- */
-export type InvoiceSplitAmount = number | null;
-
-/**
- * Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.
- */
-export type InvoiceUpdateSteuerModus = typeof InvoiceUpdateSteuerModus[keyof typeof InvoiceUpdateSteuerModus];
-
-
-export const InvoiceUpdateSteuerModus = {
-  single: 'single',
-  split: 'split',
-} as const;
-
-export interface InvoiceUpdate {
-  /** Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals. */
-  steuerModus?: InvoiceUpdateSteuerModus;
-  netto7?: InvoiceSplitAmount | null;
-  netto19?: InvoiceSplitAmount | null;
-  netto0?: InvoiceSplitAmount | null;
-  bearbeitungsstatus?: InvoiceReviewStatus;
-  /** @nullable */
-  rechnungssteller?: string | null;
-  /** @nullable */
-  datum?: string | null;
-  /** @nullable */
-  rechnungsnummer?: string | null;
-  /**
-     * @minimum -9999999999.99
-     * @maximum 9999999999.99
-     * @nullable
-     */
-  bruttoBetrag?: number | null;
-  /**
-     * @minimum 0
-     * @maximum 100
-     * @nullable
-     */
-  steuersatz?: number | null;
-  /**
-     * @minimum -9999999999.99
-     * @maximum 9999999999.99
-     * @nullable
-     */
-  steuerBetrag?: number | null;
-  /**
-     * @minimum -9999999999.99
-     * @maximum 9999999999.99
-     * @nullable
-     */
-  nettoBetrag?: number | null;
-  /** @nullable */
-  waehrung?: string | null;
-  /** @nullable */
-  bemerkung?: string | null;
-  /** @nullable */
-  freifeld1?: string | null;
-  /** @nullable */
-  freifeld2?: string | null;
-  /** @nullable */
-  freifeld3?: string | null;
-  /** @nullable */
-  lieferantId?: number | null;
-  /** @nullable */
-  buchungskonto1?: string | null;
-  /**
-     * @minimum -9999999999.99
-     * @maximum 9999999999.99
-     * @nullable
-     */
-  buchungskonto1Betrag?: number | null;
-  /** @nullable */
-  buchungskonto2?: string | null;
-  /**
-     * @minimum -9999999999.99
-     * @maximum 9999999999.99
-     * @nullable
-     */
-  buchungskonto2Betrag?: number | null;
-  /** @nullable */
-  buchungstext?: string | null;
 }
 
 export interface DropboxLinkResponse {

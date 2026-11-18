@@ -8,6 +8,612 @@
 import * as zod from 'zod';
 
 
+export const createManualBookingBodyOneNetto7Min = -9999999999.99;
+export const createManualBookingBodyOneNetto7Max = 9999999999.99;
+export const createManualBookingBodyOneNetto7MultipleOf = 0.01;
+
+export const createManualBookingBodyOneNetto19Min = -9999999999.99;
+export const createManualBookingBodyOneNetto19Max = 9999999999.99;
+export const createManualBookingBodyOneNetto19MultipleOf = 0.01;
+
+export const createManualBookingBodyOneNetto0Min = -9999999999.99;
+export const createManualBookingBodyOneNetto0Max = 9999999999.99;
+export const createManualBookingBodyOneNetto0MultipleOf = 0.01;
+
+export const createManualBookingBodyOneBruttoBetragMin = -9999999999.99;
+export const createManualBookingBodyOneBruttoBetragMax = 9999999999.99;
+
+export const createManualBookingBodyOneSteuersatzMin = 0;
+export const createManualBookingBodyOneSteuersatzMax = 100;
+export const createManualBookingBodyOneSteuersatzMultipleOf = 0.01;
+
+export const createManualBookingBodyOneSteuerBetragMin = -9999999999.99;
+export const createManualBookingBodyOneSteuerBetragMax = 9999999999.99;
+
+export const createManualBookingBodyOneNettoBetragMin = -9999999999.99;
+export const createManualBookingBodyOneNettoBetragMax = 9999999999.99;
+
+export const createManualBookingBodyOneBuchungskonto1BetragMin = -9999999999.99;
+export const createManualBookingBodyOneBuchungskonto1BetragMax = 9999999999.99;
+export const createManualBookingBodyOneBuchungskonto1BetragMultipleOf = 0.01;
+
+export const createManualBookingBodyOneBuchungskonto2BetragMin = -9999999999.99;
+export const createManualBookingBodyOneBuchungskonto2BetragMax = 9999999999.99;
+export const createManualBookingBodyOneBuchungskonto2BetragMultipleOf = 0.01;
+
+export const createManualBookingBodyTwoDatumRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const createManualBookingBodyTwoBuchungstextMax = 2000;
+
+export const createManualBookingBodyTwoWaehrungRegExp = new RegExp('^[A-Z]{3}$');
+
+
+export const CreateManualBookingBody = zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional().describe('Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.'),
+  "netto7": zod.number().min(createManualBookingBodyOneNetto7Min).max(createManualBookingBodyOneNetto7Max).multipleOf(createManualBookingBodyOneNetto7MultipleOf).nullish(),
+  "netto19": zod.number().min(createManualBookingBodyOneNetto19Min).max(createManualBookingBodyOneNetto19Max).multipleOf(createManualBookingBodyOneNetto19MultipleOf).nullish(),
+  "netto0": zod.number().min(createManualBookingBodyOneNetto0Min).max(createManualBookingBodyOneNetto0Max).multipleOf(createManualBookingBodyOneNetto0MultipleOf).nullish(),
+  "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).optional().describe('Explicit human review state; imports are always unreviewed.'),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullable(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().min(createManualBookingBodyOneBruttoBetragMin).max(createManualBookingBodyOneBruttoBetragMax).nullish(),
+  "steuersatz": zod.number().min(createManualBookingBodyOneSteuersatzMin).max(createManualBookingBodyOneSteuersatzMax).multipleOf(createManualBookingBodyOneSteuersatzMultipleOf).nullish(),
+  "steuerBetrag": zod.number().min(createManualBookingBodyOneSteuerBetragMin).max(createManualBookingBodyOneSteuerBetragMax).nullish(),
+  "nettoBetrag": zod.number().min(createManualBookingBodyOneNettoBetragMin).max(createManualBookingBodyOneNettoBetragMax).nullish(),
+  "waehrung": zod.string().nullable(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().min(createManualBookingBodyOneBuchungskonto1BetragMin).max(createManualBookingBodyOneBuchungskonto1BetragMax).multipleOf(createManualBookingBodyOneBuchungskonto1BetragMultipleOf).nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().min(createManualBookingBodyOneBuchungskonto2BetragMin).max(createManualBookingBodyOneBuchungskonto2BetragMax).multipleOf(createManualBookingBodyOneBuchungskonto2BetragMultipleOf).nullish(),
+  "buchungstext": zod.string().nullable()
+}).and(zod.object({
+  "datum": zod.string().regex(createManualBookingBodyTwoDatumRegExp),
+  "buchungstext": zod.string().min(1).max(createManualBookingBodyTwoBuchungstextMax),
+  "waehrung": zod.string().regex(createManualBookingBodyTwoWaehrungRegExp)
+}))
+
+export const CreateManualBookingResponse = zod.object({
+  "herkunft": zod.enum(['pdf', 'manual', 'recurring']).optional(),
+  "wiederholungVorlageId": zod.number().int().nullish(),
+  "faelligkeitsdatum": zod.string().nullish(),
+  "steuerModus": zod.enum(['single', 'split']).optional(),
+  "netto7": zod.number().nullish(),
+  "netto19": zod.number().nullish(),
+  "netto0": zod.number().nullish(),
+  "steuer7": zod.number().nullish(),
+  "steuer19": zod.number().nullish(),
+  "steuer0": zod.number().nullish(),
+  "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).describe('Explicit human review state; imports are always unreviewed.'),
+  "id": zod.number().int(),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullish(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "steuerBetrag": zod.number().nullish(),
+  "nettoBetrag": zod.number().nullish(),
+  "waehrung": zod.string().nullish(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().nullish(),
+  "buchungstext": zod.string().nullish(),
+  "dateiname": zod.string().nullish(),
+  "dropboxFileId": zod.string().nullish(),
+  "positionen": zod.array(zod.object({
+  "positionsnummer": zod.string().nullish(),
+  "beschreibung": zod.string(),
+  "menge": zod.number().nullish(),
+  "einheit": zod.string().nullish(),
+  "einzelpreis": zod.number().nullish(),
+  "steuersatz": zod.number().nullish(),
+  "nettobetrag": zod.number().nullish(),
+  "bruttobetrag": zod.number().nullish()
+})).optional(),
+  "createdAt": zod.string()
+})
+
+
+export const listBookingTemplatesResponseOneBookingOneNetto7Min = -9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneNetto7Max = 9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneNetto7MultipleOf = 0.01;
+
+export const listBookingTemplatesResponseOneBookingOneNetto19Min = -9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneNetto19Max = 9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneNetto19MultipleOf = 0.01;
+
+export const listBookingTemplatesResponseOneBookingOneNetto0Min = -9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneNetto0Max = 9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneNetto0MultipleOf = 0.01;
+
+export const listBookingTemplatesResponseOneBookingOneBruttoBetragMin = -9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneBruttoBetragMax = 9999999999.99;
+
+export const listBookingTemplatesResponseOneBookingOneSteuersatzMin = 0;
+export const listBookingTemplatesResponseOneBookingOneSteuersatzMax = 100;
+export const listBookingTemplatesResponseOneBookingOneSteuersatzMultipleOf = 0.01;
+
+export const listBookingTemplatesResponseOneBookingOneSteuerBetragMin = -9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneSteuerBetragMax = 9999999999.99;
+
+export const listBookingTemplatesResponseOneBookingOneNettoBetragMin = -9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneNettoBetragMax = 9999999999.99;
+
+export const listBookingTemplatesResponseOneBookingOneBuchungskonto1BetragMin = -9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneBuchungskonto1BetragMax = 9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneBuchungskonto1BetragMultipleOf = 0.01;
+
+export const listBookingTemplatesResponseOneBookingOneBuchungskonto2BetragMin = -9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneBuchungskonto2BetragMax = 9999999999.99;
+export const listBookingTemplatesResponseOneBookingOneBuchungskonto2BetragMultipleOf = 0.01;
+
+export const listBookingTemplatesResponseOneBookingTwoDatumRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const listBookingTemplatesResponseOneBookingTwoBuchungstextMax = 2000;
+
+export const listBookingTemplatesResponseOneBookingTwoWaehrungRegExp = new RegExp('^[A-Z]{3}$');
+export const listBookingTemplatesResponseOneStartDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const ListBookingTemplatesResponseItem = zod.object({
+  "booking": zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional().describe('Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.'),
+  "netto7": zod.number().min(listBookingTemplatesResponseOneBookingOneNetto7Min).max(listBookingTemplatesResponseOneBookingOneNetto7Max).multipleOf(listBookingTemplatesResponseOneBookingOneNetto7MultipleOf).nullish(),
+  "netto19": zod.number().min(listBookingTemplatesResponseOneBookingOneNetto19Min).max(listBookingTemplatesResponseOneBookingOneNetto19Max).multipleOf(listBookingTemplatesResponseOneBookingOneNetto19MultipleOf).nullish(),
+  "netto0": zod.number().min(listBookingTemplatesResponseOneBookingOneNetto0Min).max(listBookingTemplatesResponseOneBookingOneNetto0Max).multipleOf(listBookingTemplatesResponseOneBookingOneNetto0MultipleOf).nullish(),
+  "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).optional().describe('Explicit human review state; imports are always unreviewed.'),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullable(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().min(listBookingTemplatesResponseOneBookingOneBruttoBetragMin).max(listBookingTemplatesResponseOneBookingOneBruttoBetragMax).nullish(),
+  "steuersatz": zod.number().min(listBookingTemplatesResponseOneBookingOneSteuersatzMin).max(listBookingTemplatesResponseOneBookingOneSteuersatzMax).multipleOf(listBookingTemplatesResponseOneBookingOneSteuersatzMultipleOf).nullish(),
+  "steuerBetrag": zod.number().min(listBookingTemplatesResponseOneBookingOneSteuerBetragMin).max(listBookingTemplatesResponseOneBookingOneSteuerBetragMax).nullish(),
+  "nettoBetrag": zod.number().min(listBookingTemplatesResponseOneBookingOneNettoBetragMin).max(listBookingTemplatesResponseOneBookingOneNettoBetragMax).nullish(),
+  "waehrung": zod.string().nullable(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().min(listBookingTemplatesResponseOneBookingOneBuchungskonto1BetragMin).max(listBookingTemplatesResponseOneBookingOneBuchungskonto1BetragMax).multipleOf(listBookingTemplatesResponseOneBookingOneBuchungskonto1BetragMultipleOf).nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().min(listBookingTemplatesResponseOneBookingOneBuchungskonto2BetragMin).max(listBookingTemplatesResponseOneBookingOneBuchungskonto2BetragMax).multipleOf(listBookingTemplatesResponseOneBookingOneBuchungskonto2BetragMultipleOf).nullish(),
+  "buchungstext": zod.string().nullable()
+}).and(zod.object({
+  "datum": zod.string().regex(listBookingTemplatesResponseOneBookingTwoDatumRegExp),
+  "buchungstext": zod.string().min(1).max(listBookingTemplatesResponseOneBookingTwoBuchungstextMax),
+  "waehrung": zod.string().regex(listBookingTemplatesResponseOneBookingTwoWaehrungRegExp)
+})),
+  "startDate": zod.string().regex(listBookingTemplatesResponseOneStartDateRegExp),
+  "intervalMonths": zod.union([zod.literal(1),zod.literal(3),zod.literal(12)]),
+  "status": zod.enum(['active', 'paused', 'ended'])
+}).and(zod.object({
+  "id": zod.number().int(),
+  "scheduleLocked": zod.boolean()
+}))
+export const ListBookingTemplatesResponse = zod.array(ListBookingTemplatesResponseItem)
+
+
+export const createBookingTemplateBodyBookingOneNetto7Min = -9999999999.99;
+export const createBookingTemplateBodyBookingOneNetto7Max = 9999999999.99;
+export const createBookingTemplateBodyBookingOneNetto7MultipleOf = 0.01;
+
+export const createBookingTemplateBodyBookingOneNetto19Min = -9999999999.99;
+export const createBookingTemplateBodyBookingOneNetto19Max = 9999999999.99;
+export const createBookingTemplateBodyBookingOneNetto19MultipleOf = 0.01;
+
+export const createBookingTemplateBodyBookingOneNetto0Min = -9999999999.99;
+export const createBookingTemplateBodyBookingOneNetto0Max = 9999999999.99;
+export const createBookingTemplateBodyBookingOneNetto0MultipleOf = 0.01;
+
+export const createBookingTemplateBodyBookingOneBruttoBetragMin = -9999999999.99;
+export const createBookingTemplateBodyBookingOneBruttoBetragMax = 9999999999.99;
+
+export const createBookingTemplateBodyBookingOneSteuersatzMin = 0;
+export const createBookingTemplateBodyBookingOneSteuersatzMax = 100;
+export const createBookingTemplateBodyBookingOneSteuersatzMultipleOf = 0.01;
+
+export const createBookingTemplateBodyBookingOneSteuerBetragMin = -9999999999.99;
+export const createBookingTemplateBodyBookingOneSteuerBetragMax = 9999999999.99;
+
+export const createBookingTemplateBodyBookingOneNettoBetragMin = -9999999999.99;
+export const createBookingTemplateBodyBookingOneNettoBetragMax = 9999999999.99;
+
+export const createBookingTemplateBodyBookingOneBuchungskonto1BetragMin = -9999999999.99;
+export const createBookingTemplateBodyBookingOneBuchungskonto1BetragMax = 9999999999.99;
+export const createBookingTemplateBodyBookingOneBuchungskonto1BetragMultipleOf = 0.01;
+
+export const createBookingTemplateBodyBookingOneBuchungskonto2BetragMin = -9999999999.99;
+export const createBookingTemplateBodyBookingOneBuchungskonto2BetragMax = 9999999999.99;
+export const createBookingTemplateBodyBookingOneBuchungskonto2BetragMultipleOf = 0.01;
+
+export const createBookingTemplateBodyBookingTwoDatumRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const createBookingTemplateBodyBookingTwoBuchungstextMax = 2000;
+
+export const createBookingTemplateBodyBookingTwoWaehrungRegExp = new RegExp('^[A-Z]{3}$');
+export const createBookingTemplateBodyStartDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const CreateBookingTemplateBody = zod.object({
+  "booking": zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional().describe('Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.'),
+  "netto7": zod.number().min(createBookingTemplateBodyBookingOneNetto7Min).max(createBookingTemplateBodyBookingOneNetto7Max).multipleOf(createBookingTemplateBodyBookingOneNetto7MultipleOf).nullish(),
+  "netto19": zod.number().min(createBookingTemplateBodyBookingOneNetto19Min).max(createBookingTemplateBodyBookingOneNetto19Max).multipleOf(createBookingTemplateBodyBookingOneNetto19MultipleOf).nullish(),
+  "netto0": zod.number().min(createBookingTemplateBodyBookingOneNetto0Min).max(createBookingTemplateBodyBookingOneNetto0Max).multipleOf(createBookingTemplateBodyBookingOneNetto0MultipleOf).nullish(),
+  "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).optional().describe('Explicit human review state; imports are always unreviewed.'),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullable(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().min(createBookingTemplateBodyBookingOneBruttoBetragMin).max(createBookingTemplateBodyBookingOneBruttoBetragMax).nullish(),
+  "steuersatz": zod.number().min(createBookingTemplateBodyBookingOneSteuersatzMin).max(createBookingTemplateBodyBookingOneSteuersatzMax).multipleOf(createBookingTemplateBodyBookingOneSteuersatzMultipleOf).nullish(),
+  "steuerBetrag": zod.number().min(createBookingTemplateBodyBookingOneSteuerBetragMin).max(createBookingTemplateBodyBookingOneSteuerBetragMax).nullish(),
+  "nettoBetrag": zod.number().min(createBookingTemplateBodyBookingOneNettoBetragMin).max(createBookingTemplateBodyBookingOneNettoBetragMax).nullish(),
+  "waehrung": zod.string().nullable(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().min(createBookingTemplateBodyBookingOneBuchungskonto1BetragMin).max(createBookingTemplateBodyBookingOneBuchungskonto1BetragMax).multipleOf(createBookingTemplateBodyBookingOneBuchungskonto1BetragMultipleOf).nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().min(createBookingTemplateBodyBookingOneBuchungskonto2BetragMin).max(createBookingTemplateBodyBookingOneBuchungskonto2BetragMax).multipleOf(createBookingTemplateBodyBookingOneBuchungskonto2BetragMultipleOf).nullish(),
+  "buchungstext": zod.string().nullable()
+}).and(zod.object({
+  "datum": zod.string().regex(createBookingTemplateBodyBookingTwoDatumRegExp),
+  "buchungstext": zod.string().min(1).max(createBookingTemplateBodyBookingTwoBuchungstextMax),
+  "waehrung": zod.string().regex(createBookingTemplateBodyBookingTwoWaehrungRegExp)
+})),
+  "startDate": zod.string().regex(createBookingTemplateBodyStartDateRegExp),
+  "intervalMonths": zod.union([zod.literal(1),zod.literal(3),zod.literal(12)]),
+  "status": zod.enum(['active', 'paused', 'ended'])
+})
+
+export const createBookingTemplateResponseOneBookingOneNetto7Min = -9999999999.99;
+export const createBookingTemplateResponseOneBookingOneNetto7Max = 9999999999.99;
+export const createBookingTemplateResponseOneBookingOneNetto7MultipleOf = 0.01;
+
+export const createBookingTemplateResponseOneBookingOneNetto19Min = -9999999999.99;
+export const createBookingTemplateResponseOneBookingOneNetto19Max = 9999999999.99;
+export const createBookingTemplateResponseOneBookingOneNetto19MultipleOf = 0.01;
+
+export const createBookingTemplateResponseOneBookingOneNetto0Min = -9999999999.99;
+export const createBookingTemplateResponseOneBookingOneNetto0Max = 9999999999.99;
+export const createBookingTemplateResponseOneBookingOneNetto0MultipleOf = 0.01;
+
+export const createBookingTemplateResponseOneBookingOneBruttoBetragMin = -9999999999.99;
+export const createBookingTemplateResponseOneBookingOneBruttoBetragMax = 9999999999.99;
+
+export const createBookingTemplateResponseOneBookingOneSteuersatzMin = 0;
+export const createBookingTemplateResponseOneBookingOneSteuersatzMax = 100;
+export const createBookingTemplateResponseOneBookingOneSteuersatzMultipleOf = 0.01;
+
+export const createBookingTemplateResponseOneBookingOneSteuerBetragMin = -9999999999.99;
+export const createBookingTemplateResponseOneBookingOneSteuerBetragMax = 9999999999.99;
+
+export const createBookingTemplateResponseOneBookingOneNettoBetragMin = -9999999999.99;
+export const createBookingTemplateResponseOneBookingOneNettoBetragMax = 9999999999.99;
+
+export const createBookingTemplateResponseOneBookingOneBuchungskonto1BetragMin = -9999999999.99;
+export const createBookingTemplateResponseOneBookingOneBuchungskonto1BetragMax = 9999999999.99;
+export const createBookingTemplateResponseOneBookingOneBuchungskonto1BetragMultipleOf = 0.01;
+
+export const createBookingTemplateResponseOneBookingOneBuchungskonto2BetragMin = -9999999999.99;
+export const createBookingTemplateResponseOneBookingOneBuchungskonto2BetragMax = 9999999999.99;
+export const createBookingTemplateResponseOneBookingOneBuchungskonto2BetragMultipleOf = 0.01;
+
+export const createBookingTemplateResponseOneBookingTwoDatumRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const createBookingTemplateResponseOneBookingTwoBuchungstextMax = 2000;
+
+export const createBookingTemplateResponseOneBookingTwoWaehrungRegExp = new RegExp('^[A-Z]{3}$');
+export const createBookingTemplateResponseOneStartDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const CreateBookingTemplateResponse = zod.object({
+  "booking": zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional().describe('Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.'),
+  "netto7": zod.number().min(createBookingTemplateResponseOneBookingOneNetto7Min).max(createBookingTemplateResponseOneBookingOneNetto7Max).multipleOf(createBookingTemplateResponseOneBookingOneNetto7MultipleOf).nullish(),
+  "netto19": zod.number().min(createBookingTemplateResponseOneBookingOneNetto19Min).max(createBookingTemplateResponseOneBookingOneNetto19Max).multipleOf(createBookingTemplateResponseOneBookingOneNetto19MultipleOf).nullish(),
+  "netto0": zod.number().min(createBookingTemplateResponseOneBookingOneNetto0Min).max(createBookingTemplateResponseOneBookingOneNetto0Max).multipleOf(createBookingTemplateResponseOneBookingOneNetto0MultipleOf).nullish(),
+  "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).optional().describe('Explicit human review state; imports are always unreviewed.'),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullable(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().min(createBookingTemplateResponseOneBookingOneBruttoBetragMin).max(createBookingTemplateResponseOneBookingOneBruttoBetragMax).nullish(),
+  "steuersatz": zod.number().min(createBookingTemplateResponseOneBookingOneSteuersatzMin).max(createBookingTemplateResponseOneBookingOneSteuersatzMax).multipleOf(createBookingTemplateResponseOneBookingOneSteuersatzMultipleOf).nullish(),
+  "steuerBetrag": zod.number().min(createBookingTemplateResponseOneBookingOneSteuerBetragMin).max(createBookingTemplateResponseOneBookingOneSteuerBetragMax).nullish(),
+  "nettoBetrag": zod.number().min(createBookingTemplateResponseOneBookingOneNettoBetragMin).max(createBookingTemplateResponseOneBookingOneNettoBetragMax).nullish(),
+  "waehrung": zod.string().nullable(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().min(createBookingTemplateResponseOneBookingOneBuchungskonto1BetragMin).max(createBookingTemplateResponseOneBookingOneBuchungskonto1BetragMax).multipleOf(createBookingTemplateResponseOneBookingOneBuchungskonto1BetragMultipleOf).nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().min(createBookingTemplateResponseOneBookingOneBuchungskonto2BetragMin).max(createBookingTemplateResponseOneBookingOneBuchungskonto2BetragMax).multipleOf(createBookingTemplateResponseOneBookingOneBuchungskonto2BetragMultipleOf).nullish(),
+  "buchungstext": zod.string().nullable()
+}).and(zod.object({
+  "datum": zod.string().regex(createBookingTemplateResponseOneBookingTwoDatumRegExp),
+  "buchungstext": zod.string().min(1).max(createBookingTemplateResponseOneBookingTwoBuchungstextMax),
+  "waehrung": zod.string().regex(createBookingTemplateResponseOneBookingTwoWaehrungRegExp)
+})),
+  "startDate": zod.string().regex(createBookingTemplateResponseOneStartDateRegExp),
+  "intervalMonths": zod.union([zod.literal(1),zod.literal(3),zod.literal(12)]),
+  "status": zod.enum(['active', 'paused', 'ended'])
+}).and(zod.object({
+  "id": zod.number().int(),
+  "scheduleLocked": zod.boolean()
+}))
+
+
+
+
+
+export const UpdateBookingTemplateParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const updateBookingTemplateBodyBookingOneNetto7Min = -9999999999.99;
+export const updateBookingTemplateBodyBookingOneNetto7Max = 9999999999.99;
+export const updateBookingTemplateBodyBookingOneNetto7MultipleOf = 0.01;
+
+export const updateBookingTemplateBodyBookingOneNetto19Min = -9999999999.99;
+export const updateBookingTemplateBodyBookingOneNetto19Max = 9999999999.99;
+export const updateBookingTemplateBodyBookingOneNetto19MultipleOf = 0.01;
+
+export const updateBookingTemplateBodyBookingOneNetto0Min = -9999999999.99;
+export const updateBookingTemplateBodyBookingOneNetto0Max = 9999999999.99;
+export const updateBookingTemplateBodyBookingOneNetto0MultipleOf = 0.01;
+
+export const updateBookingTemplateBodyBookingOneBruttoBetragMin = -9999999999.99;
+export const updateBookingTemplateBodyBookingOneBruttoBetragMax = 9999999999.99;
+
+export const updateBookingTemplateBodyBookingOneSteuersatzMin = 0;
+export const updateBookingTemplateBodyBookingOneSteuersatzMax = 100;
+export const updateBookingTemplateBodyBookingOneSteuersatzMultipleOf = 0.01;
+
+export const updateBookingTemplateBodyBookingOneSteuerBetragMin = -9999999999.99;
+export const updateBookingTemplateBodyBookingOneSteuerBetragMax = 9999999999.99;
+
+export const updateBookingTemplateBodyBookingOneNettoBetragMin = -9999999999.99;
+export const updateBookingTemplateBodyBookingOneNettoBetragMax = 9999999999.99;
+
+export const updateBookingTemplateBodyBookingOneBuchungskonto1BetragMin = -9999999999.99;
+export const updateBookingTemplateBodyBookingOneBuchungskonto1BetragMax = 9999999999.99;
+export const updateBookingTemplateBodyBookingOneBuchungskonto1BetragMultipleOf = 0.01;
+
+export const updateBookingTemplateBodyBookingOneBuchungskonto2BetragMin = -9999999999.99;
+export const updateBookingTemplateBodyBookingOneBuchungskonto2BetragMax = 9999999999.99;
+export const updateBookingTemplateBodyBookingOneBuchungskonto2BetragMultipleOf = 0.01;
+
+export const updateBookingTemplateBodyBookingTwoDatumRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const updateBookingTemplateBodyBookingTwoBuchungstextMax = 2000;
+
+export const updateBookingTemplateBodyBookingTwoWaehrungRegExp = new RegExp('^[A-Z]{3}$');
+export const updateBookingTemplateBodyStartDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const UpdateBookingTemplateBody = zod.object({
+  "booking": zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional().describe('Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.'),
+  "netto7": zod.number().min(updateBookingTemplateBodyBookingOneNetto7Min).max(updateBookingTemplateBodyBookingOneNetto7Max).multipleOf(updateBookingTemplateBodyBookingOneNetto7MultipleOf).nullish(),
+  "netto19": zod.number().min(updateBookingTemplateBodyBookingOneNetto19Min).max(updateBookingTemplateBodyBookingOneNetto19Max).multipleOf(updateBookingTemplateBodyBookingOneNetto19MultipleOf).nullish(),
+  "netto0": zod.number().min(updateBookingTemplateBodyBookingOneNetto0Min).max(updateBookingTemplateBodyBookingOneNetto0Max).multipleOf(updateBookingTemplateBodyBookingOneNetto0MultipleOf).nullish(),
+  "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).optional().describe('Explicit human review state; imports are always unreviewed.'),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullable(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().min(updateBookingTemplateBodyBookingOneBruttoBetragMin).max(updateBookingTemplateBodyBookingOneBruttoBetragMax).nullish(),
+  "steuersatz": zod.number().min(updateBookingTemplateBodyBookingOneSteuersatzMin).max(updateBookingTemplateBodyBookingOneSteuersatzMax).multipleOf(updateBookingTemplateBodyBookingOneSteuersatzMultipleOf).nullish(),
+  "steuerBetrag": zod.number().min(updateBookingTemplateBodyBookingOneSteuerBetragMin).max(updateBookingTemplateBodyBookingOneSteuerBetragMax).nullish(),
+  "nettoBetrag": zod.number().min(updateBookingTemplateBodyBookingOneNettoBetragMin).max(updateBookingTemplateBodyBookingOneNettoBetragMax).nullish(),
+  "waehrung": zod.string().nullable(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().min(updateBookingTemplateBodyBookingOneBuchungskonto1BetragMin).max(updateBookingTemplateBodyBookingOneBuchungskonto1BetragMax).multipleOf(updateBookingTemplateBodyBookingOneBuchungskonto1BetragMultipleOf).nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().min(updateBookingTemplateBodyBookingOneBuchungskonto2BetragMin).max(updateBookingTemplateBodyBookingOneBuchungskonto2BetragMax).multipleOf(updateBookingTemplateBodyBookingOneBuchungskonto2BetragMultipleOf).nullish(),
+  "buchungstext": zod.string().nullable()
+}).and(zod.object({
+  "datum": zod.string().regex(updateBookingTemplateBodyBookingTwoDatumRegExp),
+  "buchungstext": zod.string().min(1).max(updateBookingTemplateBodyBookingTwoBuchungstextMax),
+  "waehrung": zod.string().regex(updateBookingTemplateBodyBookingTwoWaehrungRegExp)
+})),
+  "startDate": zod.string().regex(updateBookingTemplateBodyStartDateRegExp),
+  "intervalMonths": zod.union([zod.literal(1),zod.literal(3),zod.literal(12)]),
+  "status": zod.enum(['active', 'paused', 'ended'])
+})
+
+export const updateBookingTemplateResponseOneBookingOneNetto7Min = -9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneNetto7Max = 9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneNetto7MultipleOf = 0.01;
+
+export const updateBookingTemplateResponseOneBookingOneNetto19Min = -9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneNetto19Max = 9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneNetto19MultipleOf = 0.01;
+
+export const updateBookingTemplateResponseOneBookingOneNetto0Min = -9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneNetto0Max = 9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneNetto0MultipleOf = 0.01;
+
+export const updateBookingTemplateResponseOneBookingOneBruttoBetragMin = -9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneBruttoBetragMax = 9999999999.99;
+
+export const updateBookingTemplateResponseOneBookingOneSteuersatzMin = 0;
+export const updateBookingTemplateResponseOneBookingOneSteuersatzMax = 100;
+export const updateBookingTemplateResponseOneBookingOneSteuersatzMultipleOf = 0.01;
+
+export const updateBookingTemplateResponseOneBookingOneSteuerBetragMin = -9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneSteuerBetragMax = 9999999999.99;
+
+export const updateBookingTemplateResponseOneBookingOneNettoBetragMin = -9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneNettoBetragMax = 9999999999.99;
+
+export const updateBookingTemplateResponseOneBookingOneBuchungskonto1BetragMin = -9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneBuchungskonto1BetragMax = 9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneBuchungskonto1BetragMultipleOf = 0.01;
+
+export const updateBookingTemplateResponseOneBookingOneBuchungskonto2BetragMin = -9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneBuchungskonto2BetragMax = 9999999999.99;
+export const updateBookingTemplateResponseOneBookingOneBuchungskonto2BetragMultipleOf = 0.01;
+
+export const updateBookingTemplateResponseOneBookingTwoDatumRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const updateBookingTemplateResponseOneBookingTwoBuchungstextMax = 2000;
+
+export const updateBookingTemplateResponseOneBookingTwoWaehrungRegExp = new RegExp('^[A-Z]{3}$');
+export const updateBookingTemplateResponseOneStartDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const UpdateBookingTemplateResponse = zod.object({
+  "booking": zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional().describe('Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.'),
+  "netto7": zod.number().min(updateBookingTemplateResponseOneBookingOneNetto7Min).max(updateBookingTemplateResponseOneBookingOneNetto7Max).multipleOf(updateBookingTemplateResponseOneBookingOneNetto7MultipleOf).nullish(),
+  "netto19": zod.number().min(updateBookingTemplateResponseOneBookingOneNetto19Min).max(updateBookingTemplateResponseOneBookingOneNetto19Max).multipleOf(updateBookingTemplateResponseOneBookingOneNetto19MultipleOf).nullish(),
+  "netto0": zod.number().min(updateBookingTemplateResponseOneBookingOneNetto0Min).max(updateBookingTemplateResponseOneBookingOneNetto0Max).multipleOf(updateBookingTemplateResponseOneBookingOneNetto0MultipleOf).nullish(),
+  "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).optional().describe('Explicit human review state; imports are always unreviewed.'),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullable(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().min(updateBookingTemplateResponseOneBookingOneBruttoBetragMin).max(updateBookingTemplateResponseOneBookingOneBruttoBetragMax).nullish(),
+  "steuersatz": zod.number().min(updateBookingTemplateResponseOneBookingOneSteuersatzMin).max(updateBookingTemplateResponseOneBookingOneSteuersatzMax).multipleOf(updateBookingTemplateResponseOneBookingOneSteuersatzMultipleOf).nullish(),
+  "steuerBetrag": zod.number().min(updateBookingTemplateResponseOneBookingOneSteuerBetragMin).max(updateBookingTemplateResponseOneBookingOneSteuerBetragMax).nullish(),
+  "nettoBetrag": zod.number().min(updateBookingTemplateResponseOneBookingOneNettoBetragMin).max(updateBookingTemplateResponseOneBookingOneNettoBetragMax).nullish(),
+  "waehrung": zod.string().nullable(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().min(updateBookingTemplateResponseOneBookingOneBuchungskonto1BetragMin).max(updateBookingTemplateResponseOneBookingOneBuchungskonto1BetragMax).multipleOf(updateBookingTemplateResponseOneBookingOneBuchungskonto1BetragMultipleOf).nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().min(updateBookingTemplateResponseOneBookingOneBuchungskonto2BetragMin).max(updateBookingTemplateResponseOneBookingOneBuchungskonto2BetragMax).multipleOf(updateBookingTemplateResponseOneBookingOneBuchungskonto2BetragMultipleOf).nullish(),
+  "buchungstext": zod.string().nullable()
+}).and(zod.object({
+  "datum": zod.string().regex(updateBookingTemplateResponseOneBookingTwoDatumRegExp),
+  "buchungstext": zod.string().min(1).max(updateBookingTemplateResponseOneBookingTwoBuchungstextMax),
+  "waehrung": zod.string().regex(updateBookingTemplateResponseOneBookingTwoWaehrungRegExp)
+})),
+  "startDate": zod.string().regex(updateBookingTemplateResponseOneStartDateRegExp),
+  "intervalMonths": zod.union([zod.literal(1),zod.literal(3),zod.literal(12)]),
+  "status": zod.enum(['active', 'paused', 'ended'])
+}).and(zod.object({
+  "id": zod.number().int(),
+  "scheduleLocked": zod.boolean()
+}))
+
+
+export const listDueBookingsResponseBookingOneNetto7Min = -9999999999.99;
+export const listDueBookingsResponseBookingOneNetto7Max = 9999999999.99;
+export const listDueBookingsResponseBookingOneNetto7MultipleOf = 0.01;
+
+export const listDueBookingsResponseBookingOneNetto19Min = -9999999999.99;
+export const listDueBookingsResponseBookingOneNetto19Max = 9999999999.99;
+export const listDueBookingsResponseBookingOneNetto19MultipleOf = 0.01;
+
+export const listDueBookingsResponseBookingOneNetto0Min = -9999999999.99;
+export const listDueBookingsResponseBookingOneNetto0Max = 9999999999.99;
+export const listDueBookingsResponseBookingOneNetto0MultipleOf = 0.01;
+
+export const listDueBookingsResponseBookingOneBruttoBetragMin = -9999999999.99;
+export const listDueBookingsResponseBookingOneBruttoBetragMax = 9999999999.99;
+
+export const listDueBookingsResponseBookingOneSteuersatzMin = 0;
+export const listDueBookingsResponseBookingOneSteuersatzMax = 100;
+export const listDueBookingsResponseBookingOneSteuersatzMultipleOf = 0.01;
+
+export const listDueBookingsResponseBookingOneSteuerBetragMin = -9999999999.99;
+export const listDueBookingsResponseBookingOneSteuerBetragMax = 9999999999.99;
+
+export const listDueBookingsResponseBookingOneNettoBetragMin = -9999999999.99;
+export const listDueBookingsResponseBookingOneNettoBetragMax = 9999999999.99;
+
+export const listDueBookingsResponseBookingOneBuchungskonto1BetragMin = -9999999999.99;
+export const listDueBookingsResponseBookingOneBuchungskonto1BetragMax = 9999999999.99;
+export const listDueBookingsResponseBookingOneBuchungskonto1BetragMultipleOf = 0.01;
+
+export const listDueBookingsResponseBookingOneBuchungskonto2BetragMin = -9999999999.99;
+export const listDueBookingsResponseBookingOneBuchungskonto2BetragMax = 9999999999.99;
+export const listDueBookingsResponseBookingOneBuchungskonto2BetragMultipleOf = 0.01;
+
+export const listDueBookingsResponseBookingTwoDatumRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const listDueBookingsResponseBookingTwoBuchungstextMax = 2000;
+
+export const listDueBookingsResponseBookingTwoWaehrungRegExp = new RegExp('^[A-Z]{3}$');
+
+
+export const ListDueBookingsResponseItem = zod.object({
+  "templateId": zod.number().int(),
+  "dueDate": zod.string(),
+  "booking": zod.object({
+  "steuerModus": zod.enum(['single', 'split']).optional().describe('Explicit activation requires all three nullable net fields. Split totals are server-owned; switching to single clears the split without changing totals.'),
+  "netto7": zod.number().min(listDueBookingsResponseBookingOneNetto7Min).max(listDueBookingsResponseBookingOneNetto7Max).multipleOf(listDueBookingsResponseBookingOneNetto7MultipleOf).nullish(),
+  "netto19": zod.number().min(listDueBookingsResponseBookingOneNetto19Min).max(listDueBookingsResponseBookingOneNetto19Max).multipleOf(listDueBookingsResponseBookingOneNetto19MultipleOf).nullish(),
+  "netto0": zod.number().min(listDueBookingsResponseBookingOneNetto0Min).max(listDueBookingsResponseBookingOneNetto0Max).multipleOf(listDueBookingsResponseBookingOneNetto0MultipleOf).nullish(),
+  "bearbeitungsstatus": zod.enum(['unreviewed', 'to_review', 'done']).optional().describe('Explicit human review state; imports are always unreviewed.'),
+  "rechnungssteller": zod.string().nullish(),
+  "datum": zod.string().nullable(),
+  "rechnungsnummer": zod.string().nullish(),
+  "bruttoBetrag": zod.number().min(listDueBookingsResponseBookingOneBruttoBetragMin).max(listDueBookingsResponseBookingOneBruttoBetragMax).nullish(),
+  "steuersatz": zod.number().min(listDueBookingsResponseBookingOneSteuersatzMin).max(listDueBookingsResponseBookingOneSteuersatzMax).multipleOf(listDueBookingsResponseBookingOneSteuersatzMultipleOf).nullish(),
+  "steuerBetrag": zod.number().min(listDueBookingsResponseBookingOneSteuerBetragMin).max(listDueBookingsResponseBookingOneSteuerBetragMax).nullish(),
+  "nettoBetrag": zod.number().min(listDueBookingsResponseBookingOneNettoBetragMin).max(listDueBookingsResponseBookingOneNettoBetragMax).nullish(),
+  "waehrung": zod.string().nullable(),
+  "bemerkung": zod.string().nullish(),
+  "freifeld1": zod.string().nullish(),
+  "freifeld2": zod.string().nullish(),
+  "freifeld3": zod.string().nullish(),
+  "lieferantId": zod.number().int().nullish(),
+  "buchungskonto1": zod.string().nullish(),
+  "buchungskonto1Betrag": zod.number().min(listDueBookingsResponseBookingOneBuchungskonto1BetragMin).max(listDueBookingsResponseBookingOneBuchungskonto1BetragMax).multipleOf(listDueBookingsResponseBookingOneBuchungskonto1BetragMultipleOf).nullish(),
+  "buchungskonto2": zod.string().nullish(),
+  "buchungskonto2Betrag": zod.number().min(listDueBookingsResponseBookingOneBuchungskonto2BetragMin).max(listDueBookingsResponseBookingOneBuchungskonto2BetragMax).multipleOf(listDueBookingsResponseBookingOneBuchungskonto2BetragMultipleOf).nullish(),
+  "buchungstext": zod.string().nullable()
+}).and(zod.object({
+  "datum": zod.string().regex(listDueBookingsResponseBookingTwoDatumRegExp),
+  "buchungstext": zod.string().min(1).max(listDueBookingsResponseBookingTwoBuchungstextMax),
+  "waehrung": zod.string().regex(listDueBookingsResponseBookingTwoWaehrungRegExp)
+}))
+})
+export const ListDueBookingsResponse = zod.array(ListDueBookingsResponseItem)
+
+
+
+
+
+export const ConfirmDueBookingParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const confirmDueBookingBodyDueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const ConfirmDueBookingBody = zod.object({
+  "dueDate": zod.string().regex(confirmDueBookingBodyDueDateRegExp)
+})
+
+export const ConfirmDueBookingResponse = zod.object({
+  "invoiceId": zod.number().int().nullable(),
+  "alreadyConfirmed": zod.boolean()
+})
+
+
 /**
  * @summary Find possible duplicate invoices using complete matching invoice identifiers
  */
@@ -17,6 +623,9 @@ export const ListInvoiceDuplicatesResponse = zod.object({
   "matchType": zod.enum(['pdf_hash', 'metadata']),
   "key": zod.string(),
   "invoices": zod.array(zod.object({
+  "herkunft": zod.enum(['pdf', 'manual', 'recurring']).optional(),
+  "wiederholungVorlageId": zod.number().int().nullish(),
+  "faelligkeitsdatum": zod.string().nullish(),
   "steuerModus": zod.enum(['single', 'split']).optional(),
   "netto7": zod.number().nullish(),
   "netto19": zod.number().nullish(),
@@ -294,6 +903,9 @@ export const DeleteBuchungskontoResponse = zod.void()
  * @summary List all invoices
  */
 export const ListInvoicesResponseItem = zod.object({
+  "herkunft": zod.enum(['pdf', 'manual', 'recurring']).optional(),
+  "wiederholungVorlageId": zod.number().int().nullish(),
+  "faelligkeitsdatum": zod.string().nullish(),
   "steuerModus": zod.enum(['single', 'split']).optional(),
   "netto7": zod.number().nullish(),
   "netto19": zod.number().nullish(),
@@ -359,6 +971,9 @@ export const GetInvoiceStatsResponse = zod.object({
  * @summary Upload PDF invoices
  */
 export const UploadInvoicesResponseItem = zod.object({
+  "herkunft": zod.enum(['pdf', 'manual', 'recurring']).optional(),
+  "wiederholungVorlageId": zod.number().int().nullish(),
+  "faelligkeitsdatum": zod.string().nullish(),
   "steuerModus": zod.enum(['single', 'split']).optional(),
   "netto7": zod.number().nullish(),
   "netto19": zod.number().nullish(),
@@ -487,6 +1102,9 @@ export const GetReextractJobResponse = zod.union([zod.object({
   "status": zod.enum(['success']),
   "createdAt": zod.number().int(),
   "invoice": zod.object({
+  "herkunft": zod.enum(['pdf', 'manual', 'recurring']).optional(),
+  "wiederholungVorlageId": zod.number().int().nullish(),
+  "faelligkeitsdatum": zod.string().nullish(),
   "steuerModus": zod.enum(['single', 'split']).optional(),
   "netto7": zod.number().nullish(),
   "netto19": zod.number().nullish(),
@@ -608,6 +1226,9 @@ export const GetInvoiceParams = zod.object({
 })
 
 export const GetInvoiceResponse = zod.object({
+  "herkunft": zod.enum(['pdf', 'manual', 'recurring']).optional(),
+  "wiederholungVorlageId": zod.number().int().nullish(),
+  "faelligkeitsdatum": zod.string().nullish(),
   "steuerModus": zod.enum(['single', 'split']).optional(),
   "netto7": zod.number().nullish(),
   "netto19": zod.number().nullish(),
@@ -720,6 +1341,9 @@ export const UpdateInvoiceBody = zod.object({
 })
 
 export const UpdateInvoiceResponse = zod.object({
+  "herkunft": zod.enum(['pdf', 'manual', 'recurring']).optional(),
+  "wiederholungVorlageId": zod.number().int().nullish(),
+  "faelligkeitsdatum": zod.string().nullish(),
   "steuerModus": zod.enum(['single', 'split']).optional(),
   "netto7": zod.number().nullish(),
   "netto19": zod.number().nullish(),

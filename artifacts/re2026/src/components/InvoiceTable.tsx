@@ -27,6 +27,8 @@ import { DropboxConnectionNotice } from "./DropboxConnectionNotice";
 import { ArticleSummaryDialog } from "./ArticleSummaryDialog";
 import { DuplicateReviewDialog } from "./DuplicateReviewDialog";
 import { formatNumber } from "@/lib/format";
+import { OriginBadge, HERKUNFT_LABELS } from "./ManualBookingsBar";
+import { formatGermanDate } from "@/lib/manual-booking";
 import { validateBulkTaxRate, describeBulkEditError } from "@/lib/bulk-edit-validation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -590,7 +592,8 @@ export function InvoiceTable() {
         return [
           inv.dateiname, inv.rechnungssteller, inv.rechnungsnummer,
           inv.bemerkung, inv.freifeld1, inv.freifeld2, inv.freifeld3,
-          inv.datum, inv.waehrung, lieferantName,
+          inv.datum, inv.waehrung, lieferantName, inv.buchungstext,
+          HERKUNFT_LABELS[inv.herkunft ?? "pdf"],
           REVIEW_STATUS_LABELS[inv.bearbeitungsstatus ?? "unreviewed"],
         ].some((f) => f?.toLowerCase().includes(q));
       });
@@ -749,7 +752,7 @@ export function InvoiceTable() {
     if (!invoices) return;
 
     const selectedDropboxInvoices = invoices.filter(
-      (invoice) => selected.has(invoice.id) && invoice.dropboxFileId
+      (invoice) => selected.has(invoice.id) && invoice.dropboxFileId && (invoice.herkunft ?? "pdf") === "pdf"
     );
     if (selectedDropboxInvoices.length === 0) {
       toast.error("Nur Dropbox-Rechnungen können neu extrahiert werden");
@@ -1148,14 +1151,15 @@ export function InvoiceTable() {
             <Button
               size="sm" variant="outline"
               onClick={() => void handleBulkReextract()}
-              disabled={isBulkReextracting || singleReextractingId !== null}
+              disabled={isBulkReextracting || singleReextractingId !== null || !invoices.some((i) => selected.has(i.id) && i.dropboxFileId && (i.herkunft ?? "pdf") === "pdf")}
+              title="Nur PDF-Rechnungen aus Dropbox; Buchungen ohne Beleg sind ausgenommen"
             >
               {isBulkReextracting
                 ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                 : <Sparkles className="h-3.5 w-3.5 mr-1" />}
               {isBulkReextracting
                 ? `Neu auslesen (${bulkReextractProgress.completed}/${bulkReextractProgress.total})`
-                : "Neu auslesen (KI)"}
+                : `Neu auslesen (KI) (${invoices.filter((i) => selected.has(i.id) && i.dropboxFileId && (i.herkunft ?? "pdf") === "pdf").length})`}
             </Button>
             <Button
               size="sm" variant="outline"
@@ -1332,7 +1336,7 @@ export function InvoiceTable() {
                     }}
                   >
                     <td className="px-3 py-2 text-center">
-                      {inv.dropboxFileId && (
+                      {inv.dropboxFileId && (inv.herkunft ?? "pdf") === "pdf" && (
                         <button
                           title="PDF in Dropbox öffnen"
                           onClick={(e) => { e.stopPropagation(); void openDropboxLink(inv.id); }}
@@ -1340,6 +1344,10 @@ export function InvoiceTable() {
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </button>
+                      )}
+                      {(inv.herkunft ?? "pdf") !== "pdf" && (
+                        <span title={inv.herkunft === "recurring" ? "Wiederkehrende Buchung ohne Beleg" : "Buchung ohne Beleg"}
+                          className={`inline-block h-2 w-2 rounded-full ${inv.herkunft === "recurring" ? "bg-violet-500" : "bg-sky-500"}`} />
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -1376,8 +1384,13 @@ export function InvoiceTable() {
                         case "dateiname":
                           return (
                             <td key="dateiname" className="px-4 py-2 text-xs truncate max-w-[120px] text-muted-foreground" title={inv.dateiname ?? ""}>
-                              {inv.dateiname}
-                              {inv.dropboxFileId && (
+                              {(inv.herkunft ?? "pdf") !== "pdf" ? (
+                                <span className="inline-flex flex-col gap-0.5">
+                                  <OriginBadge herkunft={inv.herkunft} vorlageId={inv.wiederholungVorlageId} />
+                                  {inv.faelligkeitsdatum && <span className="text-[10px]">fällig {formatGermanDate(inv.faelligkeitsdatum)}</span>}
+                                </span>
+                              ) : inv.dateiname}
+                              {inv.dropboxFileId && (inv.herkunft ?? "pdf") === "pdf" && (
                                 <button
                                   title="Mit KI neu extrahieren"
                                   onClick={(e) => { e.stopPropagation(); void handleSingleReextract(inv.id); }}
