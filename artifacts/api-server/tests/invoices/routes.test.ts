@@ -103,6 +103,61 @@ async function upload(files: { content: string; type?: string }[], path = "/uplo
   return { status: response.status, body: await response.json() };
 }
 
+test("review status defaults conservatively, validates atomic changes and survives re-extraction", async () => {
+  const direct = await upload([{ content: "%PDF-review-status" }]);
+  const confirmed = await request("/upload-confirmed", "POST", [
+    { dateiname: "status-fixture.pdf", bearbeitungsstatus: "done" },
+  ]);
+  const ids = [direct.body[0].id, confirmed.body[0].id];
+  try {
+    assert.equal(direct.body[0].bearbeitungsstatus, "unreviewed");
+    assert.equal(confirmed.body[0].bearbeitungsstatus, "unreviewed");
+    for (const value of ["done", "to_review", "unreviewed"]) {
+      const edited = await request(`/${ids[0]}`, "PATCH", { bearbeitungsstatus: value });
+      assert.equal(edited.status, 200);
+      assert.equal(edited.body.bearbeitungsstatus, value);
+      assert.equal((await request(`/${ids[0]}`)).body.bearbeitungsstatus, value);
+    }
+    for (const value of ["done", "to_review", "unreviewed"]) {
+      const changed = await request("/bulk-update", "PATCH", { ids, fields: { bearbeitungsstatus: value } });
+      assert.deepEqual(changed.body, { updated: 2 });
+      for (const id of ids) assert.equal((await request(`/${id}`)).body.bearbeitungsstatus, value);
+    }
+    const before = (await request()).body;
+    for (const value of [null, "", "finished", "Fertig", 1, true, [], {}]) {
+      assert.equal((await request(`/${ids[0]}`, "PATCH", { bearbeitungsstatus: value, freifeld1: "bad" })).status, 400);
+      assert.equal((await request("/bulk-update", "PATCH", { ids, fields: { bearbeitungsstatus: value, freifeld1: "bad" } })).status, 400);
+      assert.equal((await request("/upload-confirmed", "POST", [{ bearbeitungsstatus: value }])).status, 400);
+      assert.deepEqual((await request()).body, before);
+    }
+    await request(`/${ids[0]}`, "PATCH", { bearbeitungsstatus: "done" });
+    await request(`/${ids[0]}`, "PATCH", { bemerkung: "unrelated edit" });
+    assert.equal((await request(`/${ids[0]}`)).body.bearbeitungsstatus, "done");
+    await client.query("UPDATE invoices SET dropbox_file_id=$1 WHERE id=$2", ["status-fixture-dropbox", ids[0]]);
+    const started = await request(`/${ids[0]}/reextract`, "POST");
+    assert.equal(started.status, 202);
+    // A status change made during extraction must not be overwritten by its old snapshot.
+    await request(`/${ids[0]}`, "PATCH", { bearbeitungsstatus: "to_review" });
+    let job;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      job = await request(`/reextract-jobs/${started.body.jobId}`);
+      if (job.body.status !== "processing") break;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.equal(job?.body.status, "success", JSON.stringify(job?.body));
+    assert.equal(job?.body.invoice.bearbeitungsstatus, "to_review");
+    assert.equal((await request(`/${ids[0]}`)).body.bearbeitungsstatus, "to_review");
+    // Legacy INSERTs / Dropbox imports omitting the field receive the DB default.
+    const legacy = await client.query("INSERT INTO invoices (dateiname) VALUES ('legacy-status-fixture.pdf') RETURNING id,bearbeitungsstatus");
+    ids.push(legacy.rows[0].id);
+    assert.equal(legacy.rows[0].bearbeitungsstatus, "unreviewed");
+    assert.equal((await request()).body.find((row: any) => row.id === legacy.rows[0].id).bearbeitungsstatus, "unreviewed");
+    await assert.rejects(client.query("UPDATE invoices SET bearbeitungsstatus='invalid' WHERE id=$1", [ids[0]]));
+  } finally {
+    await request("/bulk-delete", "POST", { ids });
+  }
+});
+
 test("original PDF hashes survive direct and reviewed uploads without trusting client hashes", async () => {
   const content = "%PDF-original-fingerprint";
   const direct = await upload([{ content }]);
@@ -306,7 +361,7 @@ test("bulk tax updates roll back every field when a later invoice fails", async 
   `);
   try {
     const result = await request("/bulk-update", "PATCH", {
-      ids, fields: { steuersatz: 7, freifeld1: "changed", buchungskonto1Betrag: 42 },
+      ids, fields: { steuersatz: 7, freifeld1: "changed", buchungskonto1Betrag: 42, bearbeitungsstatus: "done" },
     });
     assert.equal(result.status, 500);
     assert.equal((await client.query("SELECT last_value FROM pg_temp.bulk_tax_attempts")).rows[0].last_value, "2");
@@ -320,7 +375,7 @@ test("bulk tax updates roll back every field when a later invoice fails", async 
   }
   // The same connection remains usable and success commits all selected rows.
   const result = await request("/bulk-update", "PATCH", {
-    ids, fields: { steuersatz: 0, freifeld1: "committed", buchungskonto1Betrag: 42 },
+    ids, fields: { steuersatz: 0, freifeld1: "committed", buchungskonto1Betrag: 42, bearbeitungsstatus: "done" },
   });
   assert.equal(result.status, 200);
   assert.deepEqual(result.body, { updated: 3 });
@@ -330,6 +385,7 @@ test("bulk tax updates roll back every field when a later invoice fails", async 
     assert.equal(saved.nettoBetrag, original.bruttoBetrag);
     assert.equal(saved.steuerBetrag, original.bruttoBetrag === null ? null : 0);
     assert.equal(saved.freifeld1, "committed");
+    assert.equal(saved.bearbeitungsstatus, "done");
     assert.equal(saved.buchungskonto1Betrag, 42);
   }
   await request("/bulk-delete", "POST", { ids });

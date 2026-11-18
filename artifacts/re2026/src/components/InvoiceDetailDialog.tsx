@@ -24,16 +24,11 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { InvoiceStatusSelect } from "./InvoiceStatusSelect";
 import { formatNumber } from "@/lib/format";
 import { FileText, Loader2, Crosshair, ChevronLeft, ChevronRight, X, Calculator } from "lucide-react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-
-// ─── Column ID type (matches InvoiceTable) ────────────────────────────────────
-type ColId =
-  | "dateiname" | "rechnungssteller" | "lieferant" | "datum" | "rnr"
-  | "brutto" | "mwst" | "steuer" | "netto" | "waehrung"
-  | "buchung" | "bemerkung" | "freifeld1" | "freifeld2" | "freifeld3";
 
 // ─── Field labels for PDF capture ─────────────────────────────────────────────
 const CAPTURE_FIELDS: { key: keyof Invoice; label: string }[] = [
@@ -100,7 +95,7 @@ function DetailField({
 
   return (
     <div className={`flex flex-col gap-0.5 ${className}`}>
-      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+      <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
         {label}
         {!readOnly && (
           <button
@@ -116,8 +111,9 @@ function DetailField({
             <Crosshair className="h-3 w-3" />
           </button>
         )}
-      </label>
+      </div>
       <input
+        aria-label={label}
         type={type}
         value={local}
         list={hasSuggestions ? listId : undefined}
@@ -169,7 +165,7 @@ function MwStField({
 
   return (
     <div className="flex flex-col gap-0.5">
-      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+      <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
         MwSt %
         {hasAutoCalc && (
           <span className="ml-1 inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400" title="Steuer und Netto werden automatisch berechnet">
@@ -188,7 +184,7 @@ function MwStField({
         >
           <Crosshair className="h-3 w-3" />
         </button>
-      </label>
+      </div>
 
       <div className="flex gap-1.5">
         {/* Dropdown for preset rates */}
@@ -333,12 +329,10 @@ export function InvoiceDetailDialog({
   invoice,
   open,
   onOpenChange,
-  hiddenCols = new Set(),
 }: {
   invoice: Invoice | null;
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  hiddenCols?: Set<ColId>;
 }) {
   const queryClient = useQueryClient();
   const { data: lieferanten = [] } = useListLieferanten();
@@ -370,6 +364,10 @@ export function InvoiceDetailDialog({
       const result = validateSingleNumber("steuersatz", rawValue);
       setTaxError(result.error);
       if (result.error) return false;
+      parsedValue = result.value;
+    } else if (field === "buchungskonto1Betrag" || field === "buchungskonto2Betrag") {
+      const result = validateSingleNumber(field, rawValue);
+      if (result.error) { toast.error(result.error); return false; }
       parsedValue = result.value;
     } else if (["bruttoBetrag", "steuerBetrag", "nettoBetrag"].includes(field as string)) {
       parsedValue = rawValue ? (parseFloat(rawValue.replace(",", ".")) || null) : null;
@@ -420,8 +418,6 @@ export function InvoiceDetailDialog({
 
   if (!invoice) return null;
 
-  const show = (colId: ColId) => !hiddenCols.has(colId);
-
   const fieldProps = (key: keyof Invoice) => ({
     fieldKey: key,
     captureField,
@@ -430,15 +426,6 @@ export function InvoiceDetailDialog({
   });
 
   const title = invoice.rechnungssteller || invoice.dateiname || `Rechnung #${invoice.id}`;
-
-  // Check which sections have at least one visible field
-  const showBrutto  = show("brutto");
-  const showMwst    = show("mwst");
-  const showSteuer  = show("steuer");
-  const showNetto   = show("netto");
-  const showAmounts = showBrutto || showMwst || showSteuer || showNetto;
-  const showNotizenSection = show("buchung") || show("bemerkung");
-  const showFreiSection = show("freifeld1") || show("freifeld2") || show("freifeld3");
 
   // Whether brutto+mwst are both present → auto-calc is active
   const hasAutoCalc = invoice.bruttoBetrag != null && invoice.steuersatz != null;
@@ -489,13 +476,17 @@ export function InvoiceDetailDialog({
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Bearbeitungsstatus</label>
+              <InvoiceStatusSelect value={invoice.bearbeitungsstatus ?? "unreviewed"}
+                disabled={updateMutation.isPending}
+                onChange={value => { if (value) void handleUpdate("bearbeitungsstatus", value); }} />
+            </div>
+            <DetailField label="Dateiname" value={invoice.dateiname} readOnly {...fieldProps("dateiname")} />
             {/* Rechnungssteller */}
-            {show("rechnungssteller") && (
               <DetailField label="Rechnungssteller" value={invoice.rechnungssteller} {...fieldProps("rechnungssteller")} />
-            )}
 
             {/* Lieferant */}
-            {show("lieferant") && (
               <div className="flex flex-col gap-0.5">
                 <label className="text-xs font-medium text-muted-foreground">Lieferant</label>
                 <Select
@@ -515,34 +506,22 @@ export function InvoiceDetailDialog({
                   </SelectContent>
                 </Select>
               </div>
-            )}
 
             {/* Datum + RNR */}
-            {(show("datum") || show("rnr")) && (
-              <div className={`grid gap-3 ${show("datum") && show("rnr") ? "grid-cols-2" : "grid-cols-1"}`}>
-                {show("datum") && (
+              <div className="grid gap-3 grid-cols-2">
                   <DetailField label="Datum" value={invoice.datum} type="date" {...fieldProps("datum")} />
-                )}
-                {show("rnr") && (
                   <DetailField label="Rechnungsnummer" value={invoice.rechnungsnummer} {...fieldProps("rechnungsnummer")} />
-                )}
               </div>
-            )}
 
             {/* Beträge */}
-            {showAmounts && (
               <>
                 {/* Brutto + MwSt % row */}
-                {(showBrutto || showMwst) && (
-                  <div className={`grid gap-3 ${showBrutto && showMwst ? "grid-cols-2" : "grid-cols-1"}`}>
-                    {showBrutto && (
+                  <div className="grid gap-3 grid-cols-2">
                       <DetailField
                         label="Brutto"
                         value={invoice.bruttoBetrag != null ? formatNumber(invoice.bruttoBetrag) : null}
                         {...fieldProps("bruttoBetrag")}
                       />
-                    )}
-                    {showMwst && (
                       <MwStField
                         value={taxDraft ?? (invoice.steuersatz != null ? String(invoice.steuersatz) : null)}
                         error={taxError}
@@ -551,75 +530,56 @@ export function InvoiceDetailDialog({
                         onStartCapture={(k) => setCaptureField((prev) => (prev === k ? null : k))}
                         hasAutoCalc={hasAutoCalc}
                       />
-                    )}
                   </div>
-                )}
 
                 {/* Steuer + Netto row (auto-filled) */}
-                {(showSteuer || showNetto) && (
-                  <div className={`grid gap-3 ${showSteuer && showNetto ? "grid-cols-2" : "grid-cols-1"}`}>
-                    {showSteuer && (
+                  <div className="grid gap-3 grid-cols-2">
                       <DetailField
                         label={hasAutoCalc ? "Steuer (auto)" : "Steuer"}
                         value={invoice.steuerBetrag != null ? formatNumber(invoice.steuerBetrag) : null}
                         readOnly={hasAutoCalc}
                         {...fieldProps("steuerBetrag")}
                       />
-                    )}
-                    {showNetto && (
                       <DetailField
                         label={hasAutoCalc ? "Netto (auto)" : "Netto"}
                         value={invoice.nettoBetrag != null ? formatNumber(invoice.nettoBetrag) : null}
                         readOnly={hasAutoCalc}
                         {...fieldProps("nettoBetrag")}
                       />
-                    )}
                   </div>
-                )}
 
                 {/* Auto-calc hint */}
-                {hasAutoCalc && (showSteuer || showNetto) && (
+                {hasAutoCalc && (
                   <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 -mt-1">
                     <Calculator className="h-3 w-3" />
                     Steuer und Netto werden automatisch aus Brutto × MwSt % berechnet.
                   </p>
                 )}
               </>
-            )}
 
             {/* Währung */}
-            {show("waehrung") && (
               <DetailField label="Währung" value={invoice.waehrung} {...fieldProps("waehrung")} />
-            )}
 
             {/* Buchung & Notizen */}
-            {showNotizenSection && (
               <div className="border-t border-border pt-3 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buchung &amp; Notizen</p>
-                {show("buchung") && (
+                <div className="grid grid-cols-2 gap-3">
+                  <DetailField label="Buchungskonto 1" value={invoice.buchungskonto1} {...fieldProps("buchungskonto1")} />
+                  <DetailField label="Betrag Konto 1" value={invoice.buchungskonto1Betrag} {...fieldProps("buchungskonto1Betrag")} />
+                  <DetailField label="Buchungskonto 2" value={invoice.buchungskonto2} {...fieldProps("buchungskonto2")} />
+                  <DetailField label="Betrag Konto 2" value={invoice.buchungskonto2Betrag} {...fieldProps("buchungskonto2Betrag")} />
+                </div>
                   <DetailField label="Buchungstext" value={invoice.buchungstext} {...fieldProps("buchungstext")} />
-                )}
-                {show("bemerkung") && (
                   <DetailField label="Bemerkung" value={invoice.bemerkung} {...fieldProps("bemerkung")} />
-                )}
               </div>
-            )}
 
             {/* Freifelder */}
-            {showFreiSection && (
               <div className="border-t border-border pt-3 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Freifelder</p>
-                {show("freifeld1") && (
                   <DetailField label="Feld 1" value={invoice.freifeld1} {...fieldProps("freifeld1")} />
-                )}
-                {show("freifeld2") && (
                   <DetailField label="Feld 2" value={invoice.freifeld2} {...fieldProps("freifeld2")} />
-                )}
-                {show("freifeld3") && (
                   <DetailField label="Feld 3" value={invoice.freifeld3} {...fieldProps("freifeld3")} />
-                )}
               </div>
-            )}
           </div>
         </div>
       </DialogContent>

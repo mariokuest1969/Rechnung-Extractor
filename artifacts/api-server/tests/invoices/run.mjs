@@ -30,6 +30,7 @@ try {
         build.onResolve({ filter: /\/(pdf-extractor|dropbox-poller|reextract-jobs|settings)$/ }, ({ path }) =>
           path.includes("/schema/") ? undefined : ({ path, namespace: "test-boundary" }));
         build.onLoad({ filter: /.*/, namespace: "test-boundary" }, ({ path }) => ({
+          resolveDir: fileURLToPath(root),
           contents: path.endsWith("pdf-extractor")
             ? `export async function extractInvoiceFromPDF(buffer, name, dependencies, signal) {
                 if (buffer.toString() === "%PDF-hang") return new Promise(() => {});
@@ -37,9 +38,22 @@ try {
                 return { rechnungssteller: "PDF supplier", bruttoBetrag: 119, nettoBetrag: 100,
                   steuerBetrag: 19, steuersatz: 19, positionen: [{ beschreibung: "PDF position", menge: 1 }] };
               }`
+            : path.endsWith("reextract-jobs")
+            ? `import { db } from ${JSON.stringify(fileURLToPath(new URL("store.ts", import.meta.url)))};
+               const jobs = new Map();
+               export const createReextractJob = async id => { jobs.set(id, { status: "processing" }); };
+               export const readReextractJob = async id => jobs.get(id);
+               export const commitReextractJob = async (id, commit) => {
+                 const result = await db.transaction(commit);
+                 jobs.set(id, { status: "success", ...result });
+               };
+               export const failReextractJob = async (id, failure) => { jobs.set(id, { status: "error", ...failure }); };`
             : `export const syncDropbox = async () => {};
                export const cleanupDropbox = async () => {};
-               export const downloadDropboxFile = async () => {};
+               export const downloadDropboxFile = async () => {
+                 await new Promise(resolve => setTimeout(resolve, 50));
+                 return Buffer.from("%PDF-reextract-status");
+               };
                export const dropboxPost = async () => {};
                export const getDropboxToken = async () => {};
                export const createReextractJob = async () => {};

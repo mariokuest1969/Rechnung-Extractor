@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { InvoicePosition } from './invoicePosition';
+import type { InvoiceReviewStatus } from './invoiceReviewStatus';
 
 export interface Invoice {
+  bearbeitungsstatus: InvoiceReviewStatus;
   id: number;
   /** @nullable */
   rechnungssteller?: string | null;

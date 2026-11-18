@@ -5,8 +5,10 @@
  * RE2026 - Invoice extraction and management API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoiceReviewStatus } from './invoiceReviewStatus';
 
 export interface InvoiceUpdate {
+  bearbeitungsstatus?: InvoiceReviewStatus;
   /** @nullable */
   rechnungssteller?: string | null;
   /** @nullable */

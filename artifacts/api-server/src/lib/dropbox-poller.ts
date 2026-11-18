@@ -173,6 +173,7 @@ async function runDropboxSync(): Promise<SyncResult> {
           .where(eq(settingsTable.key, duplicateExclusionPrefix + file.id)).limit(1);
         if (suppressed.length) return false;
         const rows = await tx.insert(invoicesTable).values({
+        bearbeitungsstatus: "unreviewed",
         rechnungssteller: extracted.rechnungssteller,
         datum:            extracted.datum,
         rechnungsnummer:  extracted.rechnungsnummer,

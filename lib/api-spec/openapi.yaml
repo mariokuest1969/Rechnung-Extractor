@@ -912,12 +912,20 @@ components:
         bezeichnung:
           type: string
 
+    InvoiceReviewStatus:
+      type: string
+      enum: [unreviewed, to_review, done]
+      description: Explicit human review state; imports are always unreviewed.
+
     Invoice:
       type: object
       required:
         - id
         - createdAt
+        - bearbeitungsstatus
       properties:
+        bearbeitungsstatus:
+          $ref: "#/components/schemas/InvoiceReviewStatus"
         id:
           type: integer
         rechnungssteller:
@@ -992,6 +1000,8 @@ components:
     InvoiceUpdate:
       type: object
       properties:
+        bearbeitungsstatus:
+          $ref: "#/components/schemas/InvoiceReviewStatus"
         rechnungssteller:
           type: ["string", "null"]
         datum:
@@ -1127,6 +1137,8 @@ components:
           additionalProperties: false
           description: Fields to set on all selected invoices
           properties:
+            bearbeitungsstatus:
+              $ref: "#/components/schemas/InvoiceReviewStatus"
             rechnungssteller:
               type: ["string", "null"]
             lieferantId:

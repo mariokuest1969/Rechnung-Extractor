@@ -28,6 +28,18 @@ export const InvoiceDuplicateGroupMatchType = {
   metadata: 'metadata',
 } as const;
 
+/**
+ * Explicit human review state; imports are always unreviewed.
+ */
+export type InvoiceReviewStatus = typeof InvoiceReviewStatus[keyof typeof InvoiceReviewStatus];
+
+
+export const InvoiceReviewStatus = {
+  unreviewed: 'unreviewed',
+  to_review: 'to_review',
+  done: 'done',
+} as const;
+
 export interface InvoicePosition {
   /** @nullable */
   positionsnummer?: string | null;
@@ -47,6 +59,7 @@ export interface InvoicePosition {
 }
 
 export interface Invoice {
+  bearbeitungsstatus: InvoiceReviewStatus;
   id: number;
   /** @nullable */
   rechnungssteller?: string | null;
@@ -225,6 +238,7 @@ export interface BuchungskontoCreate {
 }
 
 export interface InvoiceUpdate {
+  bearbeitungsstatus?: InvoiceReviewStatus;
   /** @nullable */
   rechnungssteller?: string | null;
   /** @nullable */
@@ -347,6 +361,7 @@ export interface InvoicePreview {
  * Fields to set on all selected invoices
  */
 export type BulkUpdateBodyFields = {
+  bearbeitungsstatus?: InvoiceReviewStatus;
   /** @nullable */
   rechnungssteller?: string | null;
   /**

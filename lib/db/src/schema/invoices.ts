@@ -1,4 +1,5 @@
-import { pgTable, serial, text, numeric, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, timestamp, integer, jsonb, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,6 +16,7 @@ export interface InvoiceLinePosition {
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
+  bearbeitungsstatus: text("bearbeitungsstatus", { enum: ["unreviewed", "to_review", "done"] }).notNull().default("unreviewed"),
   rechnungssteller: text("rechnungssteller"),
   datum: text("datum"),
   rechnungsnummer: text("rechnungsnummer"),
@@ -38,7 +40,9 @@ export const invoicesTable = pgTable("invoices", {
   dropboxFileId: text("dropbox_file_id").unique(),
   positionen: jsonb("positionen").$type<InvoiceLinePosition[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  check("invoices_review_status_check", sql`${table.bearbeitungsstatus} IN ('unreviewed', 'to_review', 'done')`),
+]);
 
 export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true });
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;

@@ -66,6 +66,7 @@ function toInsertInvoice(item: ReturnType<typeof confirmedInvoice.parse>): typeo
   const { status: _status, error: _error, pdfFingerprintToken: _token, ...invoice } = item;
   return {
     ...invoice,
+    bearbeitungsstatus: "unreviewed",
     bruttoBetrag: item.bruttoBetrag == null ? null : String(item.bruttoBetrag),
     nettoBetrag: item.nettoBetrag == null ? null : String(item.nettoBetrag),
     steuerBetrag: item.steuerBetrag == null ? null : String(item.steuerBetrag),
@@ -89,6 +90,7 @@ function toInsertInvoice(item: ReturnType<typeof confirmedInvoice.parse>): typeo
 function toApiInvoice(row: typeof invoicesTable.$inferSelect) {
   return {
     id: row.id,
+    bearbeitungsstatus: row.bearbeitungsstatus ?? "unreviewed",
     rechnungssteller: row.rechnungssteller ?? null,
     datum: row.datum ?? null,
     rechnungsnummer: row.rechnungsnummer ?? null,
@@ -297,6 +299,7 @@ router.patch("/invoices/bulk-update", async (req, res): Promise<void> => {
   }
   const f = parsedFields.data;
   const update: Record<string, unknown> = {};
+  if (f.bearbeitungsstatus !== undefined) update.bearbeitungsstatus = f.bearbeitungsstatus;
   if (f.rechnungssteller !== undefined) update.rechnungssteller = f.rechnungssteller;
   if (f.lieferantId !== undefined) update.lieferantId = f.lieferantId;
   if (f.buchungskonto1 !== undefined) update.buchungskonto1 = f.buchungskonto1;
@@ -498,6 +501,7 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
   const update: Record<string, unknown> = {};
   const d = body.data;
+  if (d.bearbeitungsstatus !== undefined) update.bearbeitungsstatus = d.bearbeitungsstatus;
   if (d.rechnungssteller !== undefined) update.rechnungssteller = d.rechnungssteller;
   if (d.datum !== undefined) update.datum = d.datum;
   if (d.rechnungsnummer !== undefined) update.rechnungsnummer = d.rechnungsnummer;

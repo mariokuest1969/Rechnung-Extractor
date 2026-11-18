@@ -21,6 +21,8 @@ import { EditableCell } from "./EditableCell";
 import { LieferantenDialog } from "./LieferantenDialog";
 import { BuchungsDialog } from "./BuchungsDialog";
 import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
+import { InvoiceStatusSelect, REVIEW_STATUS_LABELS } from "./InvoiceStatusSelect";
+import type { InvoiceReviewStatus, BulkUpdateBodyFields } from "@workspace/api-client-react";
 import { DropboxConnectionNotice } from "./DropboxConnectionNotice";
 import { ArticleSummaryDialog } from "./ArticleSummaryDialog";
 import { DuplicateReviewDialog } from "./DuplicateReviewDialog";
@@ -96,6 +98,7 @@ const runReextractJob = (id: number) => runPersistentReextractJob<Invoice>(id);
 // Column definitions
 // ─────────────────────────────────────────────────────────────────────────────
 const COLUMN_DEFS = [
+  { id: "bearbeitungsstatus", label: "Bearbeitungsstatus", sortable: true, align: "left" },
   { id: "dateiname",        label: "Dateiname",        sortable: true,  align: "left"  },
   { id: "rechnungssteller", label: "Rechnungssteller",  sortable: true,  align: "left"  },
   { id: "lieferant",        label: "Lieferant",         sortable: true,  align: "left"  },
@@ -170,6 +173,7 @@ function loadSort(): { field: SortField | null; dir: "asc" | "desc" } {
 
 function getSortValue(inv: Invoice, field: SortField, lieferantenMap: Map<number, string>): string | number {
   switch (field) {
+    case "bearbeitungsstatus": return REVIEW_STATUS_LABELS[inv.bearbeitungsstatus ?? "unreviewed"];
     case "dateiname":        return inv.dateiname ?? "";
     case "rechnungssteller": return inv.rechnungssteller ?? "";
     case "lieferant":        return inv.lieferantId ? (lieferantenMap.get(inv.lieferantId) ?? "") : "";
@@ -217,6 +221,7 @@ function BulkEditDialog({
   const { data: lieferanten = [] } = useListLieferanten();
 
   const [rechnungssteller, setRechnungssteller] = useState("");
+  const [bearbeitungsstatus, setBearbeitungsstatus] = useState<InvoiceReviewStatus | "">("");
   const [lieferantId, setLieferantId] = useState<string>("");
   const [steuersatz, setSteuersatz] = useState<string>("");
   const [freifeld1, setFreifeld1] = useState("");
@@ -235,6 +240,7 @@ function BulkEditDialog({
   };
 
   const resetAll = () => {
+    setBearbeitungsstatus("");
     setRechnungssteller(""); setLieferantId(""); setSteuersatz("");
     setFreifeld1(""); setFreifeld2(""); setFreifeld3("");
     setSaveError(undefined); setServerTaxError(undefined);
@@ -271,7 +277,8 @@ function BulkEditDialog({
       taxInputRef.current?.focus();
       return;
     }
-    const fields: Record<string, string | number | null> = {};
+    const fields: BulkUpdateBodyFields = {};
+    if (bearbeitungsstatus) fields.bearbeitungsstatus = bearbeitungsstatus;
     if (rechnungssteller.trim()) fields.rechnungssteller = rechnungssteller.trim();
     if (lieferantId && lieferantId !== "none") fields.lieferantId = parseInt(lieferantId, 10);
     if (taxValidation.value !== undefined) fields.steuersatz = taxValidation.value;
@@ -300,6 +307,10 @@ function BulkEditDialog({
         </p>
 
         <fieldset disabled={bulkMutation.isPending} className="space-y-4">
+          <div>
+            <FieldLabel>Bearbeitungsstatus</FieldLabel>
+            <InvoiceStatusSelect value={bearbeitungsstatus} onChange={setBearbeitungsstatus} unchanged disabled={bulkMutation.isPending} />
+          </div>
           {/* Rechnungssteller */}
           <div>
             <FieldLabel>Rechnungssteller</FieldLabel>
@@ -513,6 +524,7 @@ export function InvoiceTable() {
   // ── Filter state ──────────────────────────────────────────────────────────
   const [searchText, setSearchText] = useState("");
   const [filterLieferantId, setFilterLieferantId] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDatumVon, setFilterDatumVon] = useState("");
   const [filterDatumBis, setFilterDatumBis] = useState("");
 
@@ -570,6 +582,7 @@ export function InvoiceTable() {
           inv.dateiname, inv.rechnungssteller, inv.rechnungsnummer,
           inv.bemerkung, inv.freifeld1, inv.freifeld2, inv.freifeld3,
           inv.datum, inv.waehrung, lieferantName,
+          REVIEW_STATUS_LABELS[inv.bearbeitungsstatus ?? "unreviewed"],
         ].some((f) => f?.toLowerCase().includes(q));
       });
     }
@@ -577,6 +590,7 @@ export function InvoiceTable() {
       const lid = Number(filterLieferantId);
       list = list.filter((inv) => inv.lieferantId === lid);
     }
+    if (filterStatus !== "all") list = list.filter(inv => (inv.bearbeitungsstatus ?? "unreviewed") === filterStatus);
     if (filterDatumVon) list = list.filter((inv) => (inv.datum ?? "") >= filterDatumVon);
     if (filterDatumBis) list = list.filter((inv) => (inv.datum ?? "") <= filterDatumBis);
     if (hiddenRows.size > 0) list = list.filter((inv) => !hiddenRows.has(inv.id));
@@ -594,10 +608,11 @@ export function InvoiceTable() {
       });
     }
     return list;
-  }, [invoices, searchText, filterLieferantId, filterDatumVon, filterDatumBis, hiddenRows, sortField, sortDir, lieferantenMap]);
+  }, [invoices, searchText, filterLieferantId, filterStatus, filterDatumVon, filterDatumBis, hiddenRows, sortField, sortDir, lieferantenMap]);
 
-  const hasActiveFilter = searchText || filterLieferantId !== "all" || filterDatumVon || filterDatumBis;
+  const hasActiveFilter = searchText || filterLieferantId !== "all" || filterStatus !== "all" || filterDatumVon || filterDatumBis;
   const clearFilters = () => {
+    setFilterStatus("all");
     setSearchText(""); setFilterLieferantId("all"); setFilterDatumVon(""); setFilterDatumBis("");
   };
 
@@ -1046,6 +1061,14 @@ export function InvoiceTable() {
 
         {/* ── Filter Bar ──────────────────────────────────────────────────── */}
         <div className="px-4 py-2 border-b border-border bg-muted/10 flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Bearbeitungsstatus
+            <select aria-label="Statusfilter" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+              className="text-sm border border-border rounded px-2 py-1.5 bg-background">
+              <option value="all">Alle Status</option>
+              {Object.entries(REVIEW_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <input
@@ -1320,6 +1343,13 @@ export function InvoiceTable() {
 
                     {orderedVisibleCols.map((colId) => {
                       switch (colId) {
+                        case "bearbeitungsstatus":
+                          return <td key={colId} className="px-4 py-2" onClick={e => e.stopPropagation()}>
+                            <InvoiceStatusSelect value={inv.bearbeitungsstatus ?? "unreviewed"}
+                              label={`Bearbeitungsstatus Rechnung ${inv.id}`}
+                              disabled={updateMutation.isPending}
+                              onChange={value => { if (value) updateMutation.mutate({ id: inv.id, data: { bearbeitungsstatus: value } }); }} />
+                          </td>;
                         case "dateiname":
                           return (
                             <td key="dateiname" className="px-4 py-2 text-xs truncate max-w-[120px] text-muted-foreground" title={inv.dateiname ?? ""}>
@@ -1506,7 +1536,6 @@ export function InvoiceTable() {
         invoice={detailInvoice}
         open={detailInvoiceId !== null}
         onOpenChange={(o) => { if (!o) setDetailInvoiceId(null); }}
-        hiddenCols={hiddenCols}
       />
 
       {/* Other Dialogs */}
